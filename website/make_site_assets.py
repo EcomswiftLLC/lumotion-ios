@@ -119,7 +119,18 @@ def main():
         im = Image.open(SAMPLES / f"{n}.jpg").convert("RGB")
         im.thumbnail((1000, 1000), Image.LANCZOS)
         im.save(OUT / "photos" / f"{n}.jpg", quality=80, optimize=True, progressive=True)
-    print("assets written to", OUT)
+    # real app slides (from tools/make_store_shots.py) for the landing page; skipped until they exist
+    slides = sorted((ROOT / "design" / "store" / "6.9").glob("*.png")) if (ROOT / "design" / "store" / "6.9").exists() else []
+    shots_dir = OUT / "shots"
+    if slides:
+        shots_dir.mkdir(exist_ok=True)
+        for old in shots_dir.glob("*.jpg"):
+            old.unlink()
+        for i, sp in enumerate(slides[:6], 1):
+            im = Image.open(sp).convert("RGB")
+            im = im.resize((660, round(im.height * 660 / im.width)), Image.LANCZOS)
+            im.save(shots_dir / f"slide-{i:02d}.jpg", quality=82, optimize=True, progressive=True)
+    print("assets written to", OUT, f"({len(slides[:6])} app slides)")
 
 
 if __name__ == "__main__":
