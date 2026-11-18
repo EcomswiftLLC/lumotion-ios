@@ -171,18 +171,26 @@ struct LayerRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityAddTraits(selected ? .isSelected : [])
-            if let onMoveUp {
-                LMIconButton(symbol: "chevron.up", label: "Move \(title) up", action: onMoveUp)
-            }
-            if let onMoveDown {
-                LMIconButton(symbol: "chevron.down", label: "Move \(title) down", action: onMoveDown)
-            }
             if let enabled {
                 Toggle("Show \(title)", isOn: enabled)
                     .labelsHidden()
                     .toggleStyle(SwitchToggleStyle(tint: LM.Palette.glow))
             }
-            if let onDelete {
+            if onMoveUp != nil || onMoveDown != nil {
+                // Reordering and deleting share one menu so the title keeps its room in a narrow panel.
+                Menu {
+                    if let onMoveUp { Button { onMoveUp() } label: { Label("Move up", systemImage: "chevron.up") } }
+                    if let onMoveDown { Button { onMoveDown() } label: { Label("Move down", systemImage: "chevron.down") } }
+                    if let onDelete { Button(role: .destructive) { onDelete() } label: { Label("Delete", systemImage: "trash") } }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 20))
+                        .foregroundStyle(LM.Palette.paper)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel(Text("More for \(title)"))
+            } else if let onDelete {
                 LMIconButton(symbol: "trash", label: "Delete \(title)", tint: LM.Palette.danger, action: onDelete)
             }
         }

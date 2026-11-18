@@ -390,6 +390,8 @@ struct SampleCard: View {
                 LM.Palette.graphite
                 if let image {
                     Image(uiImage: image).resizable().scaledToFill()
+                        .frame(width: 132, height: 168)
+                        .clipped()
                 }
                 LinearGradient(colors: [Color.clear, Color.black.opacity(0.6)], startPoint: .center, endPoint: .bottom)
                 Text(sample.title)
