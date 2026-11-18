@@ -22,8 +22,9 @@ enum DebugScreens {
             HomeView(debugFilled: true)
         case "settings":
             SettingsView()
-        case "editor":
-            EditorView(source: .photo(DebugFixtures.photo(seed: 0)))
+        case let name where name.hasPrefix("editor"):
+            let tool = name == "editor" ? nil : EditorTool(rawValue: String(name.dropFirst("editor-".count)))
+            EditorView(source: .photo(DebugFixtures.photo(seed: 0)), debugModel: DebugFixtures.editorModel(tool: tool))
         case "export":
             DebugExportScreen()
         default:
@@ -37,7 +38,7 @@ private struct DebugExportScreen: View {
         let coordinator = ExportCoordinator()
         coordinator.estimate = { choice in
             switch choice.format {
-            case .gif: return "About 6.8 MB at \(choice.gifWidth) px wide."
+            case .gif: return "About 6.8 MB at \(choice.gif.width) px wide."
             case .still: return "About 0.9 MB."
             default: return "About 4.2 MB."
             }
@@ -105,6 +106,43 @@ enum DebugFixtures {
 
     static var sampleRefs: [SampleRef] {
         ["golden-hour", "harbour", "dusk", "meadow", "aurora", "embers"].map { SampleRef(name: "sample_\($0)") }
+    }
+
+    /// An editor model with a finished-looking project, opened on `tool`. Uses a throwaway store so nothing is saved.
+    @MainActor
+    static func editorModel(tool: EditorTool?) -> EditorModel {
+        let image = gradient(seed: 0, size: CGSize(width: 1500, height: 2000))
+        var project = Project.new(title: "Harbour at dusk", kind: .still, fileName: "source.jpg", pixelWidth: 1500, pixelHeight: 2000)
+        let strokePoints = (0...16).map { NPoint(0.12 + Double($0) * 0.046, 0.78 + 0.03 * sin(Double($0) * 0.9)) }
+        var region = FlowRegion(name: "Water")
+        region.strokes = [BrushStroke(points: strokePoints, radius: 0.05, feather: 0.6)]
+        region.arrows = [FlowArrow(from: NPoint(0.25, 0.8), to: NPoint(0.75, 0.82))]
+        region.strength = 0.6
+        project.flowRegions = [region]
+        project.anchors = [BrushStroke(points: [NPoint(0.5, 0.2), NPoint(0.62, 0.28)], radius: 0.05)]
+        project.livingEffects = [LivingEffect(kind: .ripple, strength: 0.4), LivingEffect(kind: .shimmer, strength: 0.3)]
+        project.overlays = [OverlayLayer(kind: .fireflies, intensity: 0.5), OverlayLayer(kind: .dust, intensity: 0.3)]
+        project.camera.kind = .zoomIn
+        project.parallax.enabled = true
+        project.look.filter = .gilt
+        project.look.adjust.warmth = 0.2
+        var text = TextLayer(text: "Golden hour")
+        text.center = NPoint(0.5, 0.84)
+        project.texts = [text]
+        project.stickers = [StickerLayer(emoji: "✨")]
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("LumotionDebugStore", isDirectory: true)
+        let model = EditorModel(project: project, assets: SourceAssets(still: image.cgImage), store: ProjectStore(rootURL: folder))
+        model.isPlaying = false
+        model.selectedFlow = region.id
+        model.selectedEffect = project.livingEffects.first?.id
+        model.selectedOverlay = project.overlays.first?.id
+        model.selectedText = text.id
+        model.tool = tool
+        if tool == .flow {
+            model.paintTool = .arrow
+            model.paintTarget = .flow(region.id)
+        }
+        return model
     }
 
     @MainActor

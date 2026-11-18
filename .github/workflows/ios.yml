@@ -7,7 +7,7 @@ on:
 
 env:
   # Every screen the debug build can open directly with `-lmScreen <name>` (see Sources/App/DebugScreens.swift).
-  SCREENS: "onboarding home home-filled settings editor export"
+  SCREENS: "onboarding home home-filled settings editor editor-presets editor-flow editor-camera editor-depth editor-effects editor-overlays editor-looks editor-text editor-audio editor-canvas editor-timing editor-layers export"
 
 jobs:
   build-test:

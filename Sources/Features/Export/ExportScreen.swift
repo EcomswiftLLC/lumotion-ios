@@ -150,9 +150,10 @@ struct ExportScreen: View {
         ExportActionBar(coordinator: coordinator)
     }
 
-    private var resolutions: [ExportChoice.Resolution] {
-        let fitting = ExportChoice.Resolution.allCases.filter { $0.rawValue <= max(720, sourceLongSide) }
-        return fitting.isEmpty ? [.p720] : fitting
+    private var resolutions: [ExportResolution] {
+        let supported = Exporter.supportedResolutions(codec: coordinator.choice.codec ?? .h264)
+        let fitting = supported.filter { $0.longEdge <= max(1280, sourceLongSide) }
+        return fitting.isEmpty ? supported : fitting
     }
 
     private var formats: [ExportChoice.Format] {
@@ -167,6 +168,9 @@ struct ExportScreen: View {
                     ForEach(formats) { format in
                         LMChip(title: format.title, selected: coordinator.choice.format == format) {
                             coordinator.choice.format = format
+                            if let codec = format.videoCodec, !Exporter.supportedResolutions(codec: codec).contains(coordinator.choice.resolution) {
+                                coordinator.choice.resolution = Exporter.supportedResolutions(codec: codec).last ?? .p720
+                            }
                         }
                     }
                 }
@@ -174,6 +178,9 @@ struct ExportScreen: View {
                     .font(LM.Font.caption).foregroundStyle(LM.Palette.mist)
                 if coordinator.choice.format == .gif && hasAudio {
                     Text("GIFs have no sound.").font(LM.Font.caption).foregroundStyle(LM.Palette.mist)
+                }
+                if (coordinator.choice.format == .h264 || coordinator.choice.format == .hevc) && hasAudio {
+                    Text("Your audio is included.").font(LM.Font.caption).foregroundStyle(LM.Palette.mist)
                 }
             }
             switch coordinator.choice.format {
@@ -189,26 +196,48 @@ struct ExportScreen: View {
                     }
                 }
             case .gif:
-                DialSlider(
-                    title: "Width",
-                    value: Binding(
-                        get: { Double(coordinator.choice.gifWidth) },
-                        set: { coordinator.choice.gifWidth = Int(($0 / 10).rounded()) * 10 }
-                    ),
-                    range: 320...1080,
-                    defaultValue: 480,
-                    unit: " px"
-                )
+                VStack(spacing: LM.Space.m) {
+                    DialSlider(
+                        title: "Width",
+                        value: Binding(
+                            get: { Double(coordinator.choice.gif.width) },
+                            set: { coordinator.choice.gif.width = Int(($0 / 10).rounded()) * 10 }
+                        ),
+                        range: 320...1080,
+                        defaultValue: 480,
+                        unit: " px"
+                    )
+                    DialSlider(
+                        title: "Frame rate",
+                        value: Binding(
+                            get: { Double(coordinator.choice.gif.fps) },
+                            set: { coordinator.choice.gif.fps = Int($0.rounded()) }
+                        ),
+                        range: 5...30,
+                        defaultValue: 15,
+                        unit: " fps"
+                    )
+                }
             case .still:
-                VStack(alignment: .leading, spacing: LM.Space.s) {
+                VStack(alignment: .leading, spacing: LM.Space.m) {
                     Text("File type").font(LM.Font.label).foregroundStyle(LM.Palette.mist)
                     FlowChips {
-                        ForEach(ExportChoice.StillFormat.allCases) { still in
-                            LMChip(title: still.title, selected: coordinator.choice.still == still) {
+                        ForEach(StillFormat.allCases) { still in
+                            LMChip(title: still.chipTitle, selected: coordinator.choice.still == still) {
                                 coordinator.choice.still = still
                             }
                         }
                     }
+                    DialSlider(
+                        title: "Moment in the loop",
+                        value: Binding(
+                            get: { coordinator.choice.stillPosition * 100 },
+                            set: { coordinator.choice.stillPosition = $0 / 100 }
+                        ),
+                        range: 0...100,
+                        defaultValue: 0,
+                        unit: "%"
+                    )
                 }
             }
         }

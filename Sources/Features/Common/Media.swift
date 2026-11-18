@@ -19,6 +19,8 @@ enum EditorSource {
     case photo(PhotoSource)
     /// A video file copied into the app's temporary folder, for a cinemagraph.
     case video(URL)
+    /// A project saved earlier, opened from the gallery.
+    case existing(UUID)
 }
 
 /// Identifiable wrapper so `fullScreenCover(item:)` can present the editor.

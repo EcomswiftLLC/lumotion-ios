@@ -1,7 +1,7 @@
 import SwiftUI
 import AVFoundation
 
-/// What the person chose on the export screen. The editor turns it into engine export settings.
+/// What the person chose on the export screen. The editor turns it into engine calls (see `EditorModel.exportRenderer`).
 struct ExportChoice: Equatable {
     enum Format: String, CaseIterable, Identifiable {
         case h264, hevc, gif, still
@@ -19,39 +19,31 @@ struct ExportChoice: Equatable {
         var detail: String {
             switch self {
             case .h264: return "Plays everywhere. Best for sharing."
-            case .hevc: return "Smaller files, newer devices."
-            case .gif: return "Silent and loops forever. Larger files."
-            case .still: return "One frame as a photo."
+            case .hevc: return "Smaller files on newer devices."
+            case .gif: return "Silent, loops forever, larger files."
+            case .still: return "One frame saved as a photo."
             }
         }
-    }
-
-    enum Resolution: Int, CaseIterable, Identifiable {
-        case p720 = 720, p1080 = 1080, p1440 = 1440, p2160 = 2160
-        var id: Int { rawValue }
-        var title: String {
-            switch self {
-            case .p720: return "720p"
-            case .p1080: return "1080p"
-            case .p1440: return "2K"
-            case .p2160: return "4K"
-            }
-        }
-    }
-
-    enum StillFormat: String, CaseIterable, Identifiable {
-        case jpeg, png, heic
-        var id: String { rawValue }
-        var title: String { rawValue == "jpeg" ? "JPG" : rawValue.uppercased() }
     }
 
     var format: Format = .h264
-    var resolution: Resolution = .p1080
-    /// Width in pixels for GIF exports.
-    var gifWidth: Int = 480
-    var still: StillFormat = .jpeg
+    var resolution: ExportResolution = .p1080
+    var gif = GIFOptions()
+    var still: StillFormat = .jpg
     /// Which moment of the loop a still comes from, 0...1.
     var stillPosition: Double = 0
+
+    var codec: VideoCodec? {
+        switch format {
+        case .h264: return .h264
+        case .hevc: return .hevc
+        default: return nil
+        }
+    }
+}
+
+extension StillFormat {
+    var chipTitle: String { rawValue.uppercased() }
 }
 
 enum ExportFailure: Error {
@@ -165,5 +157,15 @@ final class ExportCoordinator: ObservableObject {
         }
         cached = (choice, item)
         return item
+    }
+}
+
+extension ExportChoice.Format {
+    var videoCodec: VideoCodec? {
+        switch self {
+        case .h264: return .h264
+        case .hevc: return .hevc
+        default: return nil
+        }
     }
 }

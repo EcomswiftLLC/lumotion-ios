@@ -52,13 +52,25 @@ final class InterfaceTests: XCTestCase {
         let choice = ExportChoice()
         XCTAssertEqual(choice.format, .h264)
         XCTAssertEqual(choice.resolution, .p1080)
-        XCTAssertEqual(ExportChoice.Resolution.p1440.title, "2K")
+        XCTAssertEqual(ExportResolution.k2.title, "2K")
     }
 
     func testEveryToolHasTitleAndSymbol() {
         for tool in EditorTool.allCases {
             XCTAssertFalse(tool.title.isEmpty)
             XCTAssertNotNil(UIImage(systemName: tool.symbol), "Missing SF Symbol \(tool.symbol)")
+        }
+    }
+
+    func testEverySymbolExists() {
+        for kind in OverlayKind.allCases {
+            XCTAssertNotNil(UIImage(systemName: Labels.overlaySymbol(kind)), "Missing SF Symbol \(Labels.overlaySymbol(kind))")
+        }
+        for kind in LivingEffectKind.allCases {
+            XCTAssertNotNil(UIImage(systemName: Labels.effectSymbol(kind)), "Missing SF Symbol \(Labels.effectSymbol(kind))")
+        }
+        for direction in PanDirection.allCases {
+            XCTAssertNotNil(UIImage(systemName: Labels.directionSymbol(direction)))
         }
     }
 

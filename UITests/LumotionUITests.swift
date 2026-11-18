@@ -60,6 +60,11 @@ final class LandscapeUITests: XCTestCase {
     func testHomeFilled() { check("home-filled") }
     func testSettings() { check("settings") }
     func testEditor() { check("editor") }
+    func testEditorFlow() { check("editor-flow") }
+    func testEditorLooks() { check("editor-looks") }
+    func testEditorOverlays() { check("editor-overlays") }
+    func testEditorText() { check("editor-text") }
+    func testEditorLayers() { check("editor-layers") }
     func testExport() { check("export") }
 }
 
