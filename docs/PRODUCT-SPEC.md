@@ -1,0 +1,51 @@
+# Lumotion: product spec (v1.0)
+
+Store name: **Photo Animator & Cinemagraph** (fallbacks if Apple says the name is taken: "Photo Animator, Cinemagraph", "Photo Animator: Lumotion"). Home-screen name: **Lumotion**. Bundle `com.ecomswift.lumotion`, team N84NGN3KSH, iOS 17+, universal (iPhone + iPad, every orientation), Swift 5.10, SwiftUI, XcodeGen, CI-only builds on GitHub Actions macos-26 (there is no Mac; every claim must be proven by CI tests or screenshots). Repo: EcomswiftLLC/lumotion-ios (this folder is its clone, branch main).
+
+Owner brief: "Add maximum features, features rich, must beat the competition, work on all devices (phones and iPads), SaaS design with a luxury look, free with AdMob ads and paywalled with rewarded ads." Competitors to beat: Motionleap (Lightricks), Pixaloop, PixaMotion, Loopsie, Zoetropic, Plotaverse, Cinemagraph Pro, Lively, Wonder. The app must make a person say "this does everything those do, and it is calmer and nicer to use".
+
+## Monetisation (HARD, same as Aperta/Folia)
+- Free. Banner on Home only. AdMob rewarded ad before each export (Save video, Save GIF, Share, Save still): `RewardedGate.shared.requestExport {}` exists in `Sources/Ads`; if no ad is ready or consent is pending the export is simply free. 2 min grace after a reward. No IAP, no subscription, no StoreKit, no watermark.
+- Follow Apple and AdMob policy: ATT prompt + UMP as the scaffold does, NSPrivacyTracking stays false in manifests (ITMS-91064), no misleading ad placement, no ads over editing controls, no ad in the first session before onboarding finishes.
+- No false claims anywhere (store text, in-app copy, privacy text). No "AI" wording unless a real model does it. No claims about things CI cannot prove.
+
+## Core idea
+Turn one photo (or a short video) into a seamless looping animation: flowing water and clouds, drifting hair and smoke, 3D parallax depth, living overlays (rain, snow, sparks), and true cinemagraphs from video. Everything runs on device. Nothing is uploaded.
+
+## Feature list (v1.0). Build all of it; cut only what CI cannot verify and say so in docs/STATUS.md.
+1. **Sources**: photo from library (PhotosUI), camera capture, Files import, video from library (for cinemagraph), built-in sample photos (so the app can be tried with no photo and so screenshots are real).
+2. **Flow animation** (the headline): paint a region with a brush, draw direction arrows inside it, set speed and strength; the region moves along the arrows in a perfectly seamless loop (two-phase crossfaded flow warp). Several independent regions, each with its own arrows/speed/strength/softness. Eraser, undo/redo, brush size and feather.
+3. **Anchor / freeze brush**: pin areas so they stay still while the rest flows.
+4. **Cinemagraph from video**: pick a clip, choose the loop segment (start/end, up to 6 s), choose a still frame, paint the part that keeps moving, rest stays frozen; seamless loop by crossfading the ends (loop smoothing strength) or ping-pong. Stabilise-lite (optional global translation alignment) if verifiable.
+5. **Camera motion**: zoom in/out, pan (8 directions), slow drift, rotate, shake/handheld, "breathe". Easing choices. Start/end framing.
+6. **3D parallax / depth zoom**: foreground subject vs background layers with depth from (a) Vision foreground mask (iOS 17 `VNGenerateForegroundInstanceMaskRequest`, fall back gracefully when unavailable, e.g. CI simulator), (b) the photo's embedded portrait depth/disparity if present (ImageIO auxiliary data), (c) a manual depth brush, (d) a simple depth gradient (bottom near, top far). Edge fill for revealed pixels (stretch/blur fill, no holes). Styles: dolly, orbit, swing, push-in.
+7. **Whole-photo living effects** (parametric displacement fields, maskable with a gradient or the brush): water ripple, waves, wind sway (more motion toward the top/edge of the mask), heat haze, shimmer, pulse/breathing, light sweep, glitch/VHS, rotate-wobble, wiggle, ink-in-water swirl.
+8. **Overlays** (procedural, drawn in code, no licensed assets): rain, heavy rain, snow, blizzard, falling leaves, petals, fireflies, sparkles/glitter, bokeh, dust motes, embers/sparks, smoke/fog drift, lens flare sweep, light leaks, stars twinkle, confetti, hearts, bubbles, shooting stars, fireworks. Each: intensity, speed, size, colour/tint, direction, depth blur, layer under/over the subject (using the mask when available). Several overlays can be stacked.
+9. **Looks**: 20+ filters (reuse the Core Image approach from Aperta: warm/cool/film/noir/teal-orange/dream/vivid etc., all original names), adjust dials (exposure, contrast, saturation, warmth, tint, highlights, shadows, sharpen, vignette, grain, glow/bloom), animated film grain, animated flicker/light pulse.
+10. **Text and stickers** with entrance/exit animations (fade, slide, pop, typewriter, float), fonts (system + a few built-in system font designs), colour, shadow/outline, position/size/rotation by gesture. Emoji stickers.
+11. **Audio**: add the person's own audio file (Files), trim, volume, fade; or mute. Mixed into the exported video. No bundled music (no licences).
+12. **One-tap Magic Presets** (12+): e.g. "Waterfall", "Clouds drift", "Golden hour dust", "Rainy window", "Snow globe", "Fireflies dusk", "Neon rain", "Ocean waves", "Wind in hair", "Cinematic push-in", "Dream sparkle", "Parallax portrait". Presets set effects, overlays, camera, filter, loop length and a smart default flow region (gradient-based, user can edit). Presets are honest about being starting points.
+13. **Timeline/controls**: duration 1-15 s (default 4 s), speed, fps 24/30/60, loop mode (seamless loop / ping-pong), reverse, play/pause/scrub, compare with original, per-effect on/off, layer list with reorder and delete, undo/redo for everything, haptics.
+14. **Canvas**: aspect ratios original, 1:1, 4:5, 9:16, 16:9, 3:4, with crop/reframe gesture and background fill (blur or colour) when needed.
+15. **Export**: MP4 H.264 or HEVC (720p/1080p/2K/4K where the device supports it), GIF (320-1080 wide, frame rate and palette controlled, size estimate), animated WebP is out of scope, still frame as JPG/PNG/HEIC, Live Photo only if verified. Save to Photos, Share sheet (Instagram, TikTok, WhatsApp, Messages), Open in Files. Progress, cancel, never blocks the main thread, memory safe on small devices. Size estimate before export.
+16. **Projects**: autosave, project gallery on Home (thumbnail, title, date, duration), duplicate, rename, delete (confirm), reopen anytime, recovery after crash. Stored locally in Application Support (source image + JSON).
+17. **Quality of product**: iPad layouts (split view: preview left/tools right in landscape; readable widths), landscape on iPhone, Dynamic Type, VoiceOver labels, Reduce Motion respected for UI animation, dark only luxury theme, localisation scaffolding (String Catalog, en first; es/fr/de/zh-Hans after the English is final), onboarding that ends in a real animated demo, empty states that explain what to do, error states that explain how to fix. Settings: privacy, support, rate, restore nothing (no purchases), about, ad consent (UMP privacy options entry when required).
+
+## Engine architecture (all CPU, Swift, deterministic, testable on the CI simulator)
+- No Metal dependency in v1 (CI runners have no GPU). Use `UnsafeMutablePointer<UInt8>` BGRA premultiplied buffers, `DispatchQueue.concurrentPerform` over rows, bilinear sampling, work only inside each effect's bounding box. Preview renders at <= 720 px long edge at 30 fps with adaptive resolution; export renders at full size frame by frame, streaming into `AVAssetWriter` (CVPixelBuffer pool) or `CGImageDestination` for GIF.
+- Seamless loop maths: every periodic effect is a pure function of phase p in [0,1) (loop closes exactly: frame(0) == frame(N)). Flow warp uses two phase-offset samples blended with a triangle weight. Cinemagraph video loops with a crossfade window.
+- `RenderEngine.frame(at t: Double) -> RenderedFrame` is pure given a `Project` value, so previews, exports and tests share one code path.
+- Core Image is allowed for per-project static look processing (filters/adjust applied once to the source before animating) because Aperta proved it works on CI.
+- Unit tests must prove: loop closure (first and last frame match within tolerance for every effect), masked pixels outside the region stay identical, anchors hold, exports produce a readable MP4 with the right duration/size (read back with AVAsset), GIF frame count and loop flag, project JSON round trip, overlay determinism by seed.
+
+## Design direction (SaaS, luxury)
+Dark "projection room": ink-navy base (#0A0C13), softly lit surfaces, champagne-apricot glow accent (#F2C48D) used sparingly, a restrained violet-blue secondary for depth/parallax, serif display (New York) for headlines and a clean sans for controls, generous spacing, hairline borders, glass panels, calm motion. The home screen opens with a looping hero animation made from a real photo. No stock-template look: no purple gradient blobs, no emoji icons in chrome, no cartoon stickers in the UI. Icon: a real-looking still/loop concept, not clip art. Store screenshots use real photos and the real UI.
+
+## Quality gates before submission
+1. Compiles and all unit tests pass on CI. 2. Screenshot job: every screen on iPhone portrait, iPhone landscape, iPad portrait, iPad landscape, reviewed visually. 3. design-critique, accessibility-review, ux-copy passes, findings fixed. 4. Independent code audit for bugs, races, memory, leaks, ad-policy, privacy-label truthfulness. 5. Export verified by tests (MP4/GIF read back). 6. Store listing facts match what the build really does.
+
+## Ownership (parallel agents, avoid conflicts)
+- Engine agent: `Sources/Model/**`, `Sources/Engine/**`, `Tests/Engine*`.
+- UI agent: `Sources/Features/**`, `Sources/App/**` (+ `Sources/Theme/**` tweaks), `UITests/**`, `.github/workflows/ios.yml` screenshot jobs.
+- Brand/store agent: `design/**`, `website/**`, `docs/store/**`, `docs/legal/**`, `tools/**`, `Sources/Resources/Assets.xcassets/AppIcon*`.
+Always `git pull --rebase origin main` before `git push`; never force-push; commit small and often; CI feedback is the compiler, check `gh run list` / logs after each push.
