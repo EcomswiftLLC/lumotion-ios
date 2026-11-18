@@ -38,6 +38,7 @@ struct BrushControls: View {
     var allowsArrows = false
     var showsDepth = false
     var paintTitle = "Paint"
+    var heading = "On the photo"
 
     private enum Mode: Hashable { case paint, erase, arrow, preview }
 
@@ -54,7 +55,7 @@ struct BrushControls: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: LM.Space.m) {
-            PanelSection(title: "On the photo") {
+            PanelSection(title: heading) {
                 OptionChips(
                     options: modes,
                     selection: Binding(get: { mode }, set: { set($0) }),
@@ -142,7 +143,7 @@ struct FlowPanel: View {
                 PanelNote(text: "Add a region, paint the part of the photo that should move, then draw an arrow to set its direction.")
             }
             PanelSection(title: "Anchors", detail: "Paint areas that stay perfectly still while everything around them flows.") {
-                BrushControls(model: model, target: .anchors, paintTitle: "Paint anchor")
+                BrushControls(model: model, target: .anchors, paintTitle: "Paint anchor", heading: "Anchor brush")
             }
         }
         .onAppear {
