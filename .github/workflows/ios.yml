@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  # Every screen the debug build can open directly with `-lmScreen <name>` (see Sources/App/DebugScreens.swift).
+  SCREENS: "onboarding home home-filled settings editor export"
+
 jobs:
   build-test:
     runs-on: macos-26
@@ -52,6 +56,7 @@ jobs:
           mkdir -p build
           DEST=$(xcrun simctl list devices available | grep -E "iPhone 1[6-9] Pro Max" | head -1 | sed -E 's/^ *(.*) \(([0-9A-F-]{36})\).*/\2/')
           if [ -z "$DEST" ]; then DEST=$(xcrun simctl list devices available | grep -E "iPhone 1[5-9]" | head -1 | sed -E 's/^ *(.*) \(([0-9A-F-]{36})\).*/\2/'); fi
+          echo "iPhone simulator: $DEST"
           echo "$DEST" > build/dest.txt
           xcodebuild build -project Lumotion.xcodeproj -scheme Lumotion -configuration Debug -destination "id=$DEST" -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO | tee build/shots-build.log | grep -E "error:|BUILD" | tail -n 40
       - name: Take screenshots
@@ -60,18 +65,13 @@ jobs:
           xcrun simctl boot "$DEST" || true
           xcrun simctl bootstatus "$DEST" -b || true
           xcrun simctl ui "$DEST" appearance dark || true
-          LMP=$(find build/dd -name Lumotion.app -maxdepth 6 | head -1)
-          xcrun simctl install "$DEST" "$LMP"
+          APP=$(find build/dd -name Lumotion.app -maxdepth 6 | head -1)
+          xcrun simctl install "$DEST" "$APP"
           mkdir -p shots
-          CONTAINER=$(xcrun simctl get_app_container "$DEST" com.ecomswift.lumotion data)
-          mkdir -p "$CONTAINER/Documents/samples"
-          cp design/photos/*.jpg "$CONTAINER/Documents/samples/"
-          cp design/masks/*.png "$CONTAINER/Documents/samples/"
-          for SCREEN in home editor-adjust shot-home shot-filters shot-adjust shot-crop shot-text shot-cutout shot-collage shot-resize shot-compress shot-passport shot-watermark shot-metadata settings; do
+          for SCREEN in $SCREENS; do
             xcrun simctl terminate "$DEST" com.ecomswift.lumotion || true
-            xcrun simctl launch "$DEST" com.ecomswift.lumotion -apScreen "$SCREEN" || true
-            case "$SCREEN" in shot-cutout|shot-passport) WAIT=30 ;; *) WAIT=14 ;; esac
-            sleep $WAIT
+            xcrun simctl launch "$DEST" com.ecomswift.lumotion -lmScreen "$SCREEN" || true
+            sleep 10
             xcrun simctl io "$DEST" screenshot "shots/$SCREEN.png" || true
           done
           ls shots
@@ -87,7 +87,6 @@ jobs:
           name: build-logs-shots
           path: build/*.log
           if-no-files-found: ignore
-
 
   screenshots-ipad:
     runs-on: macos-26
@@ -115,18 +114,13 @@ jobs:
           xcrun simctl boot "$DEST" || true
           xcrun simctl bootstatus "$DEST" -b || true
           xcrun simctl ui "$DEST" appearance dark || true
-          LMP=$(find build/dd -name Lumotion.app -maxdepth 6 | head -1)
-          xcrun simctl install "$DEST" "$LMP"
+          APP=$(find build/dd -name Lumotion.app -maxdepth 6 | head -1)
+          xcrun simctl install "$DEST" "$APP"
           mkdir -p shots
-          CONTAINER=$(xcrun simctl get_app_container "$DEST" com.ecomswift.lumotion data)
-          mkdir -p "$CONTAINER/Documents/samples"
-          cp design/photos/*.jpg "$CONTAINER/Documents/samples/"
-          cp design/masks/*.png "$CONTAINER/Documents/samples/"
-          for SCREEN in home editor-adjust shot-home shot-filters shot-adjust shot-crop shot-text shot-cutout shot-collage shot-resize shot-compress shot-passport shot-watermark shot-metadata settings; do
+          for SCREEN in $SCREENS; do
             xcrun simctl terminate "$DEST" com.ecomswift.lumotion || true
-            xcrun simctl launch "$DEST" com.ecomswift.lumotion -apScreen "$SCREEN" || true
-            case "$SCREEN" in shot-cutout|shot-passport) WAIT=30 ;; *) WAIT=14 ;; esac
-            sleep $WAIT
+            xcrun simctl launch "$DEST" com.ecomswift.lumotion -lmScreen "$SCREEN" || true
+            sleep 10
             xcrun simctl io "$DEST" screenshot "shots/$SCREEN.png" || true
           done
           ls shots
@@ -154,7 +148,7 @@ jobs:
           sudo xcode-select -s "$XC"
       - run: brew install xcodegen
       - run: xcodegen generate
-      - name: Landscape UI tests on iPad
+      - name: UI tests on iPad (landscape screens and first-run flow)
         run: |
           set -o pipefail
           mkdir -p build
@@ -195,7 +189,7 @@ jobs:
           sudo xcode-select -s "$XC"
       - run: brew install xcodegen
       - run: xcodegen generate
-      - name: Landscape UI tests on iPhone
+      - name: UI tests on iPhone (landscape screens and first-run flow)
         run: |
           set -o pipefail
           mkdir -p build

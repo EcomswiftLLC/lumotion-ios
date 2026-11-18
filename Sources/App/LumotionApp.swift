@@ -7,8 +7,9 @@ struct LumotionApp: App {
 
     init() {
         LMAppearance.configure()
-        // Files written only for the share sheet in an earlier session are no longer needed.
+        // Files written only for the share sheet or an import in an earlier session are no longer needed.
         ExportItem.clearShareFolder()
+        MediaLoader.clearImportFolder()
     }
 
     var body: some Scene {
@@ -24,11 +25,11 @@ struct LumotionApp: App {
 
 final class AppState: ObservableObject {
     @Published var hasOnboarded: Bool {
-        didSet { UserDefaults.standard.set(hasOnboarded, forKey: "ap.hasOnboarded") }
+        didSet { UserDefaults.standard.set(hasOnboarded, forKey: "lm.hasOnboarded") }
     }
 
     init() {
-        hasOnboarded = UserDefaults.standard.bool(forKey: "ap.hasOnboarded")
+        hasOnboarded = UserDefaults.standard.bool(forKey: "lm.hasOnboarded")
     }
 }
 
@@ -37,7 +38,6 @@ final class AppState: ObservableObject {
 struct RootView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var ads: AdsManager
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var adsStarted = false
 
     var body: some View {

@@ -137,7 +137,7 @@ final class RewardedGate: NSObject, FullScreenContentDelegate {
     private func presentOffer(from presenter: UIViewController, action: @escaping () -> Void) {
         let alert = UIAlertController(
             title: "Watch a short ad to export",
-            message: "Lumotion is free because of ads. Watch one ad to the end to save or share your photo.",
+            message: "Lumotion is free because of ads. Watch one ad to the end to save or share your animation.",
             preferredStyle: .alert
         )
         alert.addAction(UIAlertAction(title: "Not now", style: .cancel))

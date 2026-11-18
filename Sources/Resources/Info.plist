@@ -15,7 +15,7 @@
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>
-	<string>LMPL</string>
+	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
@@ -54,7 +54,9 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Lumotion opens the photos you choose to edit. Your photos stay on your device and are never uploaded.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Lumotion saves your finished photos to your library.</string>
+	<string>Lumotion saves your finished videos, GIFs and stills to your library.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Lumotion uses the camera when you choose to take a photo to animate. Photos stay on your device and are never uploaded.</string>
 	<key>NSUserTrackingUsageDescription</key>
 	<string>Your data is used to show you more relevant ads. You can use Lumotion fully without allowing this.</string>
 	<key>GADApplicationIdentifier</key>
