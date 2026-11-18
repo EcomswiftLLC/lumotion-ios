@@ -84,7 +84,7 @@ enum DepthBuilder {
     }
 
     /// Depth in canvas space, 1 is near and 0 is far, at working resolution.
-    static func build(settings: ParallaxSettings, subject: MaskBuffer?, embedded: MaskBuffer?, mapping: CanvasMapping,
+    static func build(settings: ParallaxSettings, subject: MaskBuffer?, embedded: MaskBuffer?, mapping: FrameMapping,
                       sourceAspect: Double, canvasW: Int, canvasH: Int) -> FloatField {
         let work = StrokeRaster.size(aspect: Double(canvasW) / Double(max(1, canvasH)), longEdge: 384)
         let ww = work.width, wh = work.height

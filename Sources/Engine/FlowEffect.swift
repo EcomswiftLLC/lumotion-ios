@@ -51,7 +51,7 @@ final class FlowField {
     var byteCost: Int { mask.byteCost * 3 }
 
     /// Bakes a region for a canvas of `canvasW` x `canvasH` pixels. Nil when nothing is painted.
-    static func bake(region: FlowRegion, mapping: CanvasMapping, sourceAspect: Double, canvasW: Int, canvasH: Int) -> FlowField? {
+    static func bake(region: FlowRegion, mapping: FrameMapping, sourceAspect: Double, canvasW: Int, canvasH: Int) -> FlowField? {
         let src = StrokeRaster.size(aspect: sourceAspect, longEdge: 768)
         guard let painted = StrokeRaster.paintMask(region.strokes, width: src.width, height: src.height,
                                                    featherBoost: min(max(region.softness, 0), 1) * 0.5) else { return nil }

@@ -6,7 +6,7 @@ import CoreGraphics
 /// Maps between canvas coordinates (what the person sees after the aspect ratio and reframe are applied) and photo
 /// coordinates (where strokes, arrows and masks are stored). Both are normalised 0...1 with y down.
 /// The UI uses this to turn a finger position on the preview into a stroke point.
-struct CanvasMapping {
+struct FrameMapping {
     var ax: Double
     var bx: Double
     var ay: Double
@@ -178,7 +178,7 @@ enum StrokeRaster {
     }
 
     /// Resamples a photo-space mask into canvas space (`width` x `height`). Canvas pixels that fall outside the photo get `outside`.
-    static func toCanvas(_ mask: MaskBuffer, mapping: CanvasMapping, width: Int, height: Int, outside: UInt8 = 0) -> MaskBuffer {
+    static func toCanvas(_ mask: MaskBuffer, mapping: FrameMapping, width: Int, height: Int, outside: UInt8 = 0) -> MaskBuffer {
         var out = [UInt8](repeating: outside, count: width * height)
         for y in 0..<height {
             let v = (Double(y) + 0.5) / Double(height)

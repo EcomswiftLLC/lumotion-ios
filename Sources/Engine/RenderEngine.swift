@@ -234,7 +234,7 @@ final class RenderEngine {
     private func cinemaMask(_ s: Snapshot, _ w: Int, _ h: Int) -> FloatField {
         let key = MemoKey(tag: "cinemask", a: s.digests.cinemaMask, b: s.digests.canvas, w: w, h: h)
         return memo.get(key, cost: { $0.byteCost }) {
-            let mapping = CanvasMapping(project: s.project)
+            let mapping = FrameMapping(project: s.project)
             let src = StrokeRaster.size(aspect: s.project.source.aspect, longEdge: 768)
             let work = StrokeRaster.size(aspect: Double(w) / Double(max(1, h)), longEdge: 384)
             let strokes = s.project.cinemagraph.maskStrokes
@@ -248,7 +248,7 @@ final class RenderEngine {
         let region = s.project.flowRegions[index]
         let key = MemoKey(tag: "flow", a: s.digests.flows[index], b: s.digests.canvas, w: w, h: h)
         let box: Boxed<FlowField> = memo.get(key, cost: { $0.value?.byteCost ?? 16 }) {
-            Boxed(value: FlowField.bake(region: region, mapping: CanvasMapping(project: s.project), sourceAspect: s.project.source.aspect, canvasW: w, canvasH: h))
+            Boxed(value: FlowField.bake(region: region, mapping: FrameMapping(project: s.project), sourceAspect: s.project.source.aspect, canvasW: w, canvasH: h))
         }
         return box.value
     }
@@ -260,7 +260,7 @@ final class RenderEngine {
             let src = StrokeRaster.size(aspect: s.project.source.aspect, longEdge: 768)
             guard let painted = StrokeRaster.paintMask(strokes, width: src.width, height: src.height, featherBoost: 0.1) else { return Boxed(value: nil) }
             let work = StrokeRaster.size(aspect: Double(w) / Double(max(1, h)), longEdge: 384)
-            let canvasMask = StrokeRaster.toCanvas(painted, mapping: CanvasMapping(project: s.project), width: work.width, height: work.height)
+            let canvasMask = StrokeRaster.toCanvas(painted, mapping: FrameMapping(project: s.project), width: work.width, height: work.height)
             return Boxed(value: FloatField(mask: canvasMask))
         }
         return box.value
@@ -271,7 +271,7 @@ final class RenderEngine {
         let key = MemoKey(tag: "subject", a: s.version, b: s.digests.canvas, w: w, h: h)
         let field: FloatField = memo.get(key, cost: { $0.byteCost }) {
             let work = StrokeRaster.size(aspect: Double(w) / Double(max(1, h)), longEdge: 384)
-            let canvas = StrokeRaster.toCanvas(subject, mapping: CanvasMapping(project: s.project), width: work.width, height: work.height)
+            let canvas = StrokeRaster.toCanvas(subject, mapping: FrameMapping(project: s.project), width: work.width, height: work.height)
             return FloatField(mask: StrokeRaster.blur(canvas, radius: max(1, work.width / 96), passes: 1))
         }
         return field
@@ -281,7 +281,7 @@ final class RenderEngine {
         let key = MemoKey(tag: "depth", a: combine(s.version, s.digests.depth), b: s.digests.canvas, w: w, h: h)
         return memo.get(key, cost: { $0.byteCost }) {
             DepthBuilder.build(settings: s.project.parallax, subject: s.assets.subjectMask, embedded: s.assets.embeddedDepth,
-                               mapping: CanvasMapping(project: s.project), sourceAspect: s.project.source.aspect, canvasW: w, canvasH: h)
+                               mapping: FrameMapping(project: s.project), sourceAspect: s.project.source.aspect, canvasW: w, canvasH: h)
         }
     }
 
@@ -345,7 +345,7 @@ final class RenderEngine {
                 raw = VideoFrameStore.mix(store.frame(at: length - fade + t), raw, a)
             }
         }
-        let live = CanvasCompose.resample(raw, mapping: CanvasMapping(project: s.project), width: w, height: h)
+        let live = CanvasCompose.resample(raw, mapping: FrameMapping(project: s.project), width: w, height: h)
         let composite = still.clone()
         PixelOps.blend(composite, with: live, mask: cinemaMask(s, w, h))
         if s.project.look.isNeutralForColor { return composite }

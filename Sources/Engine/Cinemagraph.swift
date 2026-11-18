@@ -7,14 +7,14 @@ import AVFoundation
 /// Puts the source picture onto the canvas: crop and zoom for `fill`, whole picture with a background for `fit`.
 enum CanvasCompose {
     /// Canvas rectangle (in pixels, y down) that the whole photo covers. Larger than the canvas when cropping.
-    static func photoRect(mapping: CanvasMapping, width: Int, height: Int) -> CGRect {
+    static func photoRect(mapping: FrameMapping, width: Int, height: Int) -> CGRect {
         let w = Double(width), h = Double(height)
         return CGRect(x: -mapping.bx / mapping.ax * w, y: -mapping.by / mapping.ay * h, width: w / mapping.ax, height: h / mapping.ay)
     }
 
     /// Renders a photo onto a canvas of `width` x `height` pixels.
     static func compose(image: CGImage, canvas: CanvasSpec, sourceAspect: Double, width: Int, height: Int) -> PixelBuffer? {
-        let mapping = CanvasMapping(canvas: canvas, sourceAspect: sourceAspect)
+        let mapping = FrameMapping(canvas: canvas, sourceAspect: sourceAspect)
         let buffer = PixelBuffer(width: width, height: height)
         let rect = photoRect(mapping: mapping, width: width, height: height)
         let ok: Bool? = buffer.withContext { ctx in
@@ -40,7 +40,7 @@ enum CanvasCompose {
         var fill = CanvasSpec()
         fill.aspect = canvas.aspect
         fill.fit = .fill
-        let fillMapping = CanvasMapping(canvas: fill, sourceAspect: sourceAspect)
+        let fillMapping = FrameMapping(canvas: fill, sourceAspect: sourceAspect)
         let sw = max(4, width / 8), sh = max(4, height / 8)
         let small = PixelBuffer(width: sw, height: sh)
         small.withContext { c in
@@ -82,7 +82,7 @@ enum CanvasCompose {
     }
 
     /// Resamples a picture that has the shape of the source into canvas space. Canvas pixels outside the photo stay transparent.
-    static func resample(_ raw: PixelBuffer, mapping: CanvasMapping, width: Int, height: Int) -> PixelBuffer {
+    static func resample(_ raw: PixelBuffer, mapping: FrameMapping, width: Int, height: Int) -> PixelBuffer {
         let out = PixelBuffer(width: width, height: height)
         let rw = Float(raw.width), rh = Float(raw.height)
         let ax = Float(mapping.ax), bx = Float(mapping.bx), ay = Float(mapping.ay), by = Float(mapping.by)
