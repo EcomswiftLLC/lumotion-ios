@@ -11,7 +11,7 @@ enum DebugScreens {
         return value
     }
 
-    @ViewBuilder
+    @MainActor @ViewBuilder
     static func view(for screen: String) -> some View {
         switch screen {
         case "onboarding":
