@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "note": "suggestedPresetID values use the kebab-case slugs of the Magic Preset names in docs/PRODUCT-SPEC.md. If the engine ids differ, update this file. Credits: docs/store/photo-credits.md",
+  "photos": [
+    { "file": "waterfall.jpg",       "title": "Forest Waterfall",   "blurb": "Falling water and the pool below flow in a seamless loop.", "suggestedPresetID": "waterfall",          "credit": "Lywin, Pexels" },
+    { "file": "ocean-waves.jpg",     "title": "Ocean Waves",        "blurb": "Waves and foam roll in against the rocks.",                "suggestedPresetID": "ocean-waves",        "credit": "Nrlh Semiz, Pexels" },
+    { "file": "sky-clouds.jpg",      "title": "Dramatic Sky",       "blurb": "Clouds drift across a sunset skyline.",                    "suggestedPresetID": "clouds-drift",       "credit": "Kris Moklebust, Pexels" },
+    { "file": "forest-mist.jpg",     "title": "Misty Forest",       "blurb": "Mist drifts through the light rays.",                      "suggestedPresetID": "golden-hour-dust",   "credit": "David Music, Pexels" },
+    { "file": "city-rain-night.jpg", "title": "Rainy Night",        "blurb": "Rain falls over a wet, glowing street.",                   "suggestedPresetID": "neon-rain",          "credit": "Darkhanbaatar Baasanjav, Pexels" },
+    { "file": "flowers-field.jpg",   "title": "Wildflower Meadow",  "blurb": "Flowers and grass sway in the wind.",                      "suggestedPresetID": "wind-in-hair",       "credit": "Franziska Leimkuhler, Pexels" },
+    { "file": "portrait-hair.jpg",   "title": "Windswept Portrait", "blurb": "Hair drifts while depth parallax moves the scene.",        "suggestedPresetID": "parallax-portrait",  "credit": "Waldemar, Pexels" },
+    { "file": "snowy-trees.jpg",     "title": "Snowy Pines",        "blurb": "Snow falls through a quiet winter forest.",                "suggestedPresetID": "snow-globe",         "credit": "Kovacs Csongor, Pexels" },
+    { "file": "sunset-lake.jpg",     "title": "Sunset Lake",        "blurb": "The water and its reflections ripple under a glowing sky.", "suggestedPresetID": "ocean-waves",       "credit": "Lucas Krzywaznia, Pexels" },
+    { "file": "dusk-fireflies.jpg",  "title": "Golden Dusk",        "blurb": "Glowing particles float over swaying grass.",              "suggestedPresetID": "fireflies-dusk",     "credit": "Nube, Pexels" },
+    { "file": "mountain-valley.jpg", "title": "Mountain Valley",    "blurb": "Cloud and mist roll through the valley with a slow push-in.", "suggestedPresetID": "cinematic-push-in", "credit": "Jean-Pierre Debernardi, Pexels" },
+    { "file": "candle-flame.jpg",    "title": "Candle Glow",        "blurb": "Warm sparkle and a gentle light pulse.",                   "suggestedPresetID": "dream-sparkle",      "credit": "Jahra Tasfia Reza, Pexels" }
+  ],
+  "videos": [
+    { "file": "Videos/mossy-waterfall.mp4", "title": "Mossy Waterfall", "blurb": "Keep the water moving, freeze the rock.",        "credit": "Martina Tomsic, Pexels" },
+    { "file": "Videos/candle-flame.mp4",    "title": "Candle Flame",    "blurb": "Only the flame flickers.",                       "credit": "Tima Miroshnichenko, Pexels" },
+    { "file": "Videos/steaming-cup.mp4",    "title": "Steaming Cup",    "blurb": "Paint the steam, hold the cup.",                 "credit": "cottonbro studio, Pexels" },
+    { "file": "Videos/smoke-wisps.mp4",     "title": "Smoke Wisps",     "blurb": "Smoke curls against a dark room.",               "credit": "Miguel A. Padrinan, Pexels" },
+    { "file": "Videos/beach-waves.mp4",     "title": "Beach Waves",     "blurb": "Slow waves wash up the sand.",                   "credit": "Magda Ehlers, Pexels" }
+  ]
+}
