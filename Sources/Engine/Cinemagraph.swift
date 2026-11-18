@@ -108,6 +108,15 @@ enum CanvasCompose {
 
 // MARK: - Video frames
 
+/// Frame slots filled from the decoder's background threads.
+private final class FrameSlots: @unchecked Sendable {
+    private let lock = NSLock()
+    private var slots: [PixelBuffer?]
+    init(count: Int) { slots = [PixelBuffer?](repeating: nil, count: count) }
+    func set(_ index: Int, _ buffer: PixelBuffer) { lock.lock(); slots[index] = buffer; lock.unlock() }
+    func snapshot() -> [PixelBuffer?] { lock.lock(); defer { lock.unlock() }; return slots }
+}
+
 /// The frames of one cinemagraph segment, held in memory at reduced size (a fixed byte budget decides the size) so they
 /// can be read in any order while scrubbing and exporting. Reading the video happens once, with AVAssetImageGenerator.
 final class VideoFrameStore {
@@ -197,8 +206,7 @@ final class VideoFrameStore {
             let t = min(segStart + Double(i) / storeFPS, max(segStart, total - 0.05))
             times.append(NSValue(time: CMTime(seconds: t, preferredTimescale: 600)))
         }
-        var slots = [PixelBuffer?](repeating: nil, count: count)
-        let lock = NSLock()
+        let slotBox = FrameSlots(count: count)
         let group = DispatchGroup()
         for _ in 0..<count { group.enter() }
         generator.generateCGImagesAsynchronously(forTimes: times) { requested, image, _, result, _ in
@@ -207,11 +215,12 @@ final class VideoFrameStore {
             guard result == .succeeded, let image else { return }
             let index = min(count - 1, max(0, Int(((CMTimeGetSeconds(requested) - segStart) * storeFPS).rounded())))
             guard let buffer = PixelBuffer.scaled(image, width: fw, height: fh) else { return }
-            lock.lock(); slots[index] = buffer; lock.unlock()
+            slotBox.set(index, buffer)
         }
         group.wait()
         if token?.isCancelled == true { return nil }
         // Fill any frame the decoder could not give us from its neighbour.
+        let slots = slotBox.snapshot()
         guard let firstGood = slots.first(where: { $0 != nil }) ?? nil else { return nil }
         var frames = [PixelBuffer]()
         var last = firstGood
