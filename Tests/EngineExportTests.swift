@@ -157,7 +157,15 @@ final class EngineExportTests: XCTestCase {
         XCTAssertEqual(decoded.width, estimate.width)
         // The picture is recognisable: not blank and not a single colour.
         let bytes = Fixture.rgba(decoded)
-        let distinct = Set(stride(from: 0, to: bytes.count, by: 4).map { (Int(bytes[$0]) << 16) | (Int(bytes[$0 + 1]) << 8) | Int(bytes[$0 + 2]) })
+        var distinct = Set<Int>()
+        var offset = 0
+        while offset + 2 < bytes.count {
+            let red: Int = Int(bytes[offset])
+            let green: Int = Int(bytes[offset + 1])
+            let blue: Int = Int(bytes[offset + 2])
+            distinct.insert(red * 65536 + green * 256 + blue)
+            offset += 4
+        }
         XCTAssertGreaterThan(distinct.count, 8)
     }
 
