@@ -46,7 +46,7 @@ enum EditorTool: String, CaseIterable, Identifiable, Hashable {
 /// Arranges the editor for every screen shape, so no control is ever cut off:
 /// - iPad and other wide windows: preview on the left, tool panel on the right, tool dock along the bottom.
 /// - iPhone in landscape: tool dock as a column on the left, preview in the middle, a scrolling panel on the right.
-/// - Portrait: preview on top, a scrolling panel under it (at most 42% of the height), tool dock along the bottom.
+/// - Portrait: preview on top, a scrolling panel under it (40% of the height), tool dock along the bottom.
 struct EditorScaffold<TopBar: View, CanvasArea: View, Transport: View, Panel: View, Dock: View>: View {
     let hasPanel: Bool
     @ViewBuilder var topBar: () -> TopBar
@@ -86,13 +86,14 @@ struct EditorScaffold<TopBar: View, CanvasArea: View, Transport: View, Panel: Vi
                 } else {
                     stage
                     if hasPanel {
-                        // Shrinks to its content, and scrolls once it would take more than 42% of the height.
-                        ViewThatFits(in: .vertical) {
-                            panel().padding(.vertical, LM.Space.s)
-                            ScrollView { panel().padding(.vertical, LM.Space.s) }.scrollIndicators(.hidden)
+                        // A fixed share of the height, so the preview keeps its size while tools change. Content starts at the top.
+                        ScrollView {
+                            panel()
+                                .padding(.vertical, LM.Space.s)
+                                .frame(maxWidth: .infinity, alignment: .topLeading)
                         }
-                        .frame(maxWidth: .infinity)
-                        .frame(maxHeight: geo.size.height * 0.42)
+                        .scrollIndicators(.hidden)
+                        .frame(height: geo.size.height * 0.4)
                         .background(LM.Palette.carbon)
                     }
                     dock(.horizontal)
@@ -157,7 +158,7 @@ struct EditorDock: View {
                         .minimumScaleFactor(0.75)
                 }
                 .foregroundStyle(isSelected ? LM.Palette.glow : LM.Palette.paper.opacity(0.85))
-                .frame(minWidth: 68, minHeight: 56)
+                .frame(minWidth: 62, minHeight: 56)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

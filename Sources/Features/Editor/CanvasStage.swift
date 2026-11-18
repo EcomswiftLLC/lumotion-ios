@@ -173,7 +173,7 @@ struct CanvasStage: View {
             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(LM.Palette.line, lineWidth: 1))
             .position(x: geo.size.width / 2, y: geo.size.height / 2)
         }
-        .padding(LM.Space.m)
+        .padding(LM.Space.s)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("Preview of your animation"))
     }
