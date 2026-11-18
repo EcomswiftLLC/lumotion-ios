@@ -18,7 +18,7 @@ struct HomeView: View {
     @State private var session: EditorSession?
     @State private var loading = false
     @State private var errorMessage: String?
-    @State private var samples: [SampleLibrary.Sample] = []
+    @State private var samples: [SampleRef] = []
     @State private var heroImage: UIImage?
     @State private var renaming: ProjectSummary?
     @State private var renameText = ""
@@ -252,7 +252,7 @@ struct HomeView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: LM.Space.s) {
                         ForEach(samples) { sample in
-                            SampleCard(sample: sample, debugFilled: debugFilled) { openSample(sample) }
+                            SampleCard(sample: sample) { openSample(sample) }
                         }
                     }
                     .padding(.vertical, 2)
@@ -317,16 +317,12 @@ struct HomeView: View {
     // MARK: Opening things
 
     private func loadSamples() async {
-        let found = await Task.detached(priority: .utility) { SampleLibrary.all() }.value
+        let found = await Task.detached(priority: .utility) { Samples.refs() }.value
         samples = found
         if let first = found.first {
-            let image = await Task.detached(priority: .utility) { Thumbnails.make(url: first.url, maxPixel: 1400) }.value
+            let image = await Task.detached(priority: .utility) { Samples.image(first, maxPixel: 1400).map { UIImage(cgImage: $0) } }.value
             heroImage = image
         }
-        #if DEBUG
-        if heroImage == nil && debugFilled { heroImage = DebugFixtures.gradient(seed: 0, size: CGSize(width: 900, height: 1000)) }
-        if samples.isEmpty && debugFilled { samples = DebugFixtures.samples }
-        #endif
     }
 
     private func open(_ item: PhotosPickerItem, mode: PickerMode) async {
@@ -361,10 +357,10 @@ struct HomeView: View {
         session = EditorSession(source: source)
     }
 
-    private func openSample(_ sample: SampleLibrary.Sample) {
+    private func openSample(_ sample: SampleRef) {
         loading = true
         Task {
-            let photo = await Task.detached(priority: .userInitiated) { SampleLibrary.photo(sample) }.value
+            let photo = await Task.detached(priority: .userInitiated) { Samples.photo(sample) }.value
             loading = false
             if let photo { session = EditorSession(source: .photo(photo)) }
             else { errorMessage = "This sample could not be opened." }
@@ -383,8 +379,7 @@ struct HomeView: View {
 }
 
 struct SampleCard: View {
-    let sample: SampleLibrary.Sample
-    var debugFilled = false
+    let sample: SampleRef
     let action: () -> Void
 
     @State private var image: UIImage?
@@ -410,13 +405,7 @@ struct SampleCard: View {
         .buttonStyle(.plain)
         .accessibilityLabel(Text("Sample photo, \(sample.title)"))
         .task {
-            #if DEBUG
-            if sample.url.scheme == "debug" {
-                image = DebugFixtures.gradient(seed: Int(sample.url.host ?? "0") ?? 0, size: CGSize(width: 264, height: 336))
-                return
-            }
-            #endif
-            image = await Task.detached(priority: .utility) { Thumbnails.make(url: sample.url, maxPixel: 400) }.value
+            image = await Task.detached(priority: .utility) { Samples.image(sample, maxPixel: 400).map { UIImage(cgImage: $0) } }.value
         }
     }
 }

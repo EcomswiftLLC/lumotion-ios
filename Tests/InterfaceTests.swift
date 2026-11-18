@@ -5,9 +5,9 @@ import UIKit
 /// Tests for the pieces behind the screens (not the engine).
 final class InterfaceTests: XCTestCase {
     func testSampleTitles() {
-        XCTAssertEqual(SampleLibrary.title(for: URL(fileURLWithPath: "/tmp/sample_golden-hour_02.jpg")), "Golden hour")
-        XCTAssertEqual(SampleLibrary.title(for: URL(fileURLWithPath: "/tmp/harbour.jpg")), "Harbour")
-        XCTAssertEqual(SampleLibrary.title(for: URL(fileURLWithPath: "/tmp/sample_01.jpg")), "Sample")
+        XCTAssertEqual(SampleRef(name: "sample_golden-hour_02").title, "Golden hour")
+        XCTAssertEqual(SampleRef(name: "harbour").title, "Harbour")
+        XCTAssertEqual(SampleRef(name: "sample_01").title, "Sample")
     }
 
     func testFormatting() {

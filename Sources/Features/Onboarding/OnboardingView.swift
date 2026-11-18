@@ -39,12 +39,10 @@ struct OnboardingView: View {
             if reduceMotion { appeared = true } else { withAnimation(.easeOut(duration: 0.9)) { appeared = true } }
         }
         .task {
-            if let first = await Task.detached(priority: .utility, operation: { SampleLibrary.all().first }).value {
-                heroImage = await Task.detached(priority: .utility) { Thumbnails.make(url: first.url, maxPixel: 1400) }.value
-            }
-            #if DEBUG
-            if heroImage == nil && DebugScreens.requested != nil { heroImage = DebugFixtures.gradient(seed: 1, size: CGSize(width: 900, height: 1000)) }
-            #endif
+            heroImage = await Task.detached(priority: .utility) { () -> UIImage? in
+                guard let first = Samples.refs().first else { return nil }
+                return Samples.image(first, maxPixel: 1400).map { UIImage(cgImage: $0) }
+            }.value
         }
     }
 

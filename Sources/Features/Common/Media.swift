@@ -7,8 +7,8 @@ import AVFoundation
 /// A photo the person chose, decoded upright and capped in size so a huge panorama cannot exhaust memory.
 struct PhotoSource {
     let image: CGImage
-    /// The file bytes the image was decoded from (JPEG, HEIC or PNG), kept so the project can store the source.
-    let data: Data
+    /// The file bytes the image was decoded from (JPEG, HEIC or PNG), used to read portrait depth. Nil for bundled samples.
+    let data: Data?
     let name: String
 
     var pixelSize: CGSize { CGSize(width: image.width, height: image.height) }
@@ -135,62 +135,50 @@ struct CameraPicker: UIViewControllerRepresentable {
 
 // MARK: - Sample photos
 
-/// Sample photos that ship with the app (Sources/Resources/Samples), so Lumotion can be tried without choosing a photo.
-/// The folder is optional: with no samples the Home screen simply leaves the strip out.
-enum SampleLibrary {
-    struct Sample: Identifiable, Hashable {
-        let id: String
-        let title: String
-        let url: URL
-    }
+/// A bundled sample photo, named as `SampleLibrary.availableNames()` reports it.
+struct SampleRef: Identifiable, Hashable {
+    let name: String
+    var id: String { name }
 
-    private static let extensions = ["jpg", "jpeg", "heic", "png"]
-
-    static func all() -> [Sample] {
-        var urls: [URL] = []
-        for ext in extensions {
-            urls += Bundle.main.urls(forResourcesWithExtension: ext, subdirectory: "Samples") ?? []
-            // Xcode flattens resource groups, so a sample may also sit at the top of the bundle.
-            let root = Bundle.main.urls(forResourcesWithExtension: ext, subdirectory: nil) ?? []
-            urls += root.filter { $0.lastPathComponent.lowercased().hasPrefix("sample") }
-        }
-        #if DEBUG
-        urls += DebugSampleFolder.urls()
-        #endif
-        var seen = Set<String>()
-        return urls
-            .filter { seen.insert($0.deletingPathExtension().lastPathComponent).inserted }
-            .sorted { $0.lastPathComponent < $1.lastPathComponent }
-            .map { Sample(id: $0.deletingPathExtension().lastPathComponent, title: title(for: $0), url: $0) }
-    }
-
-    static func photo(_ sample: Sample) -> PhotoSource? {
-        guard let data = try? Data(contentsOf: sample.url) else { return nil }
-        return MediaLoader.decodePhoto(data, name: sample.title)
-    }
-
-    /// "sample_golden-hour_02.jpg" becomes "Golden hour".
-    static func title(for url: URL) -> String {
-        var name = url.deletingPathExtension().lastPathComponent
-        if name.lowercased().hasPrefix("sample") { name = String(name.dropFirst("sample".count)) }
-        let words = name
+    /// "sample_golden-hour_02" becomes "Golden hour".
+    var title: String {
+        var text = name
+        if text.lowercased().hasPrefix("sample") { text = String(text.dropFirst("sample".count)) }
+        let words = text
             .replacingOccurrences(of: "_", with: " ")
             .replacingOccurrences(of: "-", with: " ")
             .split(separator: " ")
             .filter { Int($0) == nil }
+            .map(String.init)
         guard let first = words.first else { return "Sample" }
-        let text = ([String(first).capitalized] + words.dropFirst().map(String.init)).joined(separator: " ")
-        return text
+        return ([first.prefix(1).uppercased() + first.dropFirst()] + words.dropFirst()).joined(separator: " ")
     }
 }
 
-#if DEBUG
-/// CI can copy extra photos into the simulator app's Documents/samples folder.
-enum DebugSampleFolder {
-    static func urls() -> [URL] {
-        guard let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("samples", isDirectory: true),
-              let items = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) else { return [] }
-        return items.filter { ["jpg", "jpeg", "png", "heic"].contains($0.pathExtension.lowercased()) }
+/// Access to the bundled sample photos through the engine's `SampleLibrary`. The sample strip is left out when the app
+/// ships no samples. Debug screenshot runs fall back to generated pictures (never in Release builds).
+enum Samples {
+    static func refs() -> [SampleRef] {
+        let found = SampleLibrary.availableNames().map { SampleRef(name: $0) }
+        #if DEBUG
+        if found.isEmpty && DebugScreens.requested != nil { return DebugFixtures.sampleRefs }
+        #endif
+        return found
+    }
+
+    static func image(_ ref: SampleRef, maxPixel: Int) -> CGImage? {
+        if let image = SampleLibrary.image(named: ref.name, maxPixel: maxPixel) { return image }
+        #if DEBUG
+        if DebugScreens.requested != nil {
+            let seed = ref.name.utf8.reduce(0) { $0 &+ Int($1) }
+            let side = CGFloat(maxPixel)
+            return DebugFixtures.gradient(seed: seed, size: CGSize(width: side * 0.8, height: side)).cgImage
+        }
+        #endif
+        return nil
+    }
+
+    static func photo(_ ref: SampleRef) -> PhotoSource? {
+        image(ref, maxPixel: MediaLoader.maxPhotoPixel).map { PhotoSource(image: $0, data: nil, name: ref.title) }
     }
 }
-#endif

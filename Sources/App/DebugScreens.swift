@@ -103,11 +103,8 @@ enum DebugFixtures {
         return PhotoSource(image: image.cgImage!, data: image.jpegData(compressionQuality: 0.9) ?? Data(), name: "Debug photo")
     }
 
-    static var samples: [SampleLibrary.Sample] {
-        let titles = ["Golden hour", "Harbour", "Dusk", "Meadow", "Aurora", "Embers"]
-        return titles.enumerated().map { index, title in
-            SampleLibrary.Sample(id: "debug\(index)", title: title, url: URL(string: "debug://\(index)")!)
-        }
+    static var sampleRefs: [SampleRef] {
+        ["golden-hour", "harbour", "dusk", "meadow", "aurora", "embers"].map { SampleRef(name: "sample_\($0)") }
     }
 
     @MainActor
