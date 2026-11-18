@@ -179,7 +179,7 @@ extension XCTestCase {
     /// Checks that a loop has no visible seam. The step from the last frame back to the first must be no bigger than the
     /// biggest step between neighbouring frames elsewhere in the loop, and the loop must actually move.
     func assertSeamless(_ project: Project, label: String, photo: CGImage? = nil, subject: MaskBuffer? = nil, longEdge: Int = 96,
-                        expectMotion: Bool = true, file: StaticString = #filePath, line: UInt = #line) {
+                        expectMotion: Bool = true, checkSeam: Bool = true, file: StaticString = #filePath, line: UInt = #line) {
         let engine = Fixture.engine(project, photo: photo, subject: subject)
         let n = project.loop.frameCount
         let fps = Double(project.loop.fps)
@@ -196,9 +196,13 @@ extension XCTestCase {
         let steps = [Fixture.meanDiff(first, second), Fixture.meanDiff(beforeLast, last), Fixture.meanDiff(quarter, frame(max(1, n / 4) + 1)),
                      Fixture.meanDiff(half, frame(max(2, n / 2) + 1))]
         let biggest = steps.max() ?? 0
-        XCTAssertLessThanOrEqual(seam, biggest * 2.5 + 1.0, "\(label): seam \(seam) against neighbouring steps \(steps)", file: file, line: line)
+        if checkSeam {
+            XCTAssertLessThanOrEqual(seam, biggest * 2.5 + 1.0, "\(label): seam \(seam) against neighbouring steps \(steps)", file: file, line: line)
+        }
         if expectMotion {
-            let travelled = max(Fixture.meanDiff(first, quarter), Fixture.meanDiff(first, half))
+            // A flow with one cycle per loop looks the same at phase 0 and 0.5, so a third sample point is used as well.
+            let third = frame(max(1, n / 3))
+            let travelled = max(Fixture.meanDiff(first, quarter), Fixture.meanDiff(first, half), Fixture.meanDiff(first, third))
             XCTAssertGreaterThan(travelled, 0.01, "\(label): the loop does not move", file: file, line: line)
         }
     }

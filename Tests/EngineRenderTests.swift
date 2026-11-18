@@ -394,7 +394,9 @@ final class EngineRenderTests: XCTestCase {
             p.look.flicker = Flicker()
             p.loop.fps = Fixture.fps
             p.loop.duration = Fixture.duration
-            assertSeamless(p, label: "preset \(info.id)", longEdge: 80)
+            // Presets with a stop-motion effect (glitch, wiggle) jump between steps by design: they are checked for wrap and motion only.
+            let stepped = p.livingEffects.contains { $0.kind == .glitch || $0.kind == .wiggle }
+            assertSeamless(p, label: "preset \(info.id)", longEdge: 80, checkSeam: !stepped)
         }
     }
 
