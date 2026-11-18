@@ -1,0 +1,14 @@
+Lumotion turns a photo into a looping animation and a short video into a cinemagraph. There is no account, no login and no demo credentials. Everything works on first launch.
+
+How to test:
+1. Finish the short welcome screens. On Home, tap one of the sample photos (built into the app), or choose a photo from your library.
+2. In the editor, open Presets and tap one, or open Flow, paint over an area and draw an arrow. Press play to see the loop. Overlays, Camera, Depth, Looks and Text are in the tool dock.
+3. Tap Export and choose MP4, GIF or still image.
+
+Ads: the app is free and supported by Google AdMob. A banner appears on Home only. Before an export, the app offers one opt-in rewarded video ("Watch a short ad to export"); one watched ad covers exports for 2 minutes. If no ad is available (offline, no fill, consent pending), the export simply goes ahead without one. There are no in-app purchases, no subscriptions and no watermark. A Google UMP consent form may appear first in regions where it is required, followed by the App Tracking Transparency prompt; the app works the same whichever choice is made.
+
+Permissions: Photos (read access through the system photo picker, add-only access to save results), Camera (only if the user taps to take a photo to animate), Tracking (App Tracking Transparency, for ads). The app does not use the microphone or location.
+
+Privacy: photos and videos are processed on the device and are never uploaded. The only network traffic is the Google Mobile Ads SDK. Privacy policy: https://ecomswiftllc.github.io/lumotion/privacy/
+
+Sample photos and clips bundled with the app are from Pexels (Pexels License); credits are in the project documentation.

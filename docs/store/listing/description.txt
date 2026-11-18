@@ -1,0 +1,41 @@
+Make a still photo move. Lumotion turns one photo into a seamless looping animation and one short video into a cinemagraph, all on your iPhone or iPad. Paint where the motion goes, add depth, rain or sparkles, then export an MP4 or a GIF. It is free, there is no account, and nothing is uploaded.
+
+PAINT THE MOTION
+- Flow brush: paint an area, draw arrows to set the direction, then set the speed and strength. Water, smoke, clouds and hair can drift in a loop that closes without a seam
+- Several flow areas in one photo, each with its own arrows, speed, strength and softness
+- Anchor brush: pin parts of the picture so they stay perfectly still
+- Eraser, undo and redo, brush size and feather
+
+CINEMAGRAPHS FROM VIDEO
+- Choose a clip, choose a loop of up to 6 seconds and a still frame, then paint the part that keeps moving. The rest stays frozen
+- Loop smoothing blends the ends so the clip repeats without a jump, or play it back and forth
+
+DEPTH AND CAMERA
+- 3D parallax: move the camera between a subject and its background. Depth can come from the subject found on your device, from depth saved in portrait photos, from a depth brush you paint, or from a simple gradient. Revealed edges are filled, so there are no holes
+- Camera moves: zoom in or out, pan, drift, rotate, handheld shake and breathe, with the easing you choose
+
+LIVING EFFECTS AND OVERLAYS
+- Whole-photo effects: water ripple, waves, wind sway, heat haze, shimmer, pulse, light sweep, glitch and more, over the whole picture or only where you paint
+- 20 overlays: rain, heavy rain, snow, blizzard, falling leaves, petals, fireflies, sparkles, bokeh, dust, embers, smoke and fog, lens flare, light leaks, twinkling stars, confetti, hearts, bubbles, shooting stars and fireworks. Stack as many as you like and set the intensity, speed, size and tint of each
+
+MAGIC PRESETS
+- One tap sets up a starting point, such as Waterfall, Clouds drift, Rainy window, Neon rain or Parallax portrait. They are starting points, so you can change everything afterwards
+
+LOOKS, TEXT AND SOUND
+- More than 20 looks, adjustment dials and animated film grain
+- Text and emoji stickers with entrance and exit animations
+- Add an audio file of your own, with trim, volume and fade. Lumotion does not include music
+
+EXPORT YOUR WAY
+- MP4 video (H.264 or HEVC), GIF, or a still image
+- Original, square, 4:5, 9:16, 16:9 and 3:4 shapes, loops from 1 to 15 seconds, 24, 30 or 60 frames per second
+- Save to Photos, share, or open in Files. No watermark
+- Projects save as you work, so you can come back to them any time
+
+PRIVATE BY DESIGN
+Every frame is made on your device. Your photos, videos and audio are never uploaded, and there is no account. Lumotion finds the subject for depth effects with Apple's Vision technology on the device.
+
+FREE, WITH ADS
+Lumotion is free. Ads from Google AdMob pay for it: a banner on the Home screen and, before you export, one short video that you choose to watch. One watched ad covers your exports for 2 minutes. If no ad is available, your export goes ahead. If you allow tracking when iOS asks, the ads may use your advertising identifier. The app works the same either way.
+
+Questions or ideas? Write to support@ecomswiftllc.com.
