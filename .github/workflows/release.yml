@@ -62,9 +62,18 @@ jobs:
           LMP=build/Lumotion.xcarchive/Products/Applications/Lumotion.app
           /usr/libexec/PlistBuddy -c "Print :GADApplicationIdentifier" "$LMP/Info.plist"
           /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$LMP/Info.plist"
-          if /usr/libexec/PlistBuddy -c "Print :GADApplicationIdentifier" "$LMP/Info.plist" | grep -q "3940256099942544"; then
-            echo "Archive uses the Google test app id" && exit 1
-          fi
+          # The app id and both unit ids must be real: not Google's test id (3940256099942544) and not an unresolved $(...) setting.
+          for KEY in GADApplicationIdentifier LMBannerAdUnitID LMRewardedAdUnitID; do
+            VALUE="$(/usr/libexec/PlistBuddy -c "Print :$KEY" "$LMP/Info.plist")"
+            echo "$KEY = $VALUE"
+            if [ -z "$VALUE" ]; then
+              echo "$KEY is empty in the archive" && exit 1
+            fi
+            case "$VALUE" in
+              *3940256099942544*) echo "$KEY uses the Google test id" && exit 1 ;;
+              '$('*) echo "$KEY was not filled in (still $VALUE)" && exit 1 ;;
+            esac
+          done
 
       - name: Create distribution certificate and profile (short-lived)
         env:

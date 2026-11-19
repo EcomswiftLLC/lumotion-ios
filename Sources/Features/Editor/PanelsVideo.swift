@@ -208,7 +208,6 @@ struct VideoPanel: View {
                 if !settings.pingPong {
                     ParamDial(title: "Loop smoothing", value: segmentBinding(\.loopSmoothing), range: 0...1, defaultValue: 0.4, unit: "%", scale: 100)
                 }
-                ToggleRow(title: "Steady the shot", isOn: segmentBinding(\.stabilize), detail: "Aligns frames to reduce hand shake.")
             }
             PanelSection(title: "Live area", detail: "Paint the part that keeps moving. Everything else stays frozen.") {
                 BrushControls(model: model, target: .cinemagraph, paintTitle: "Paint live area")

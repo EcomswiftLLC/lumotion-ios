@@ -31,21 +31,9 @@ struct ExportItem: Identifiable, Equatable {
         (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
     }
 
-    /// Folder for files that are written only so they can be shared. Cleared when the app starts.
-    static var shareFolder: URL {
-        FileManager.default.temporaryDirectory.appendingPathComponent("LumotionShare", isDirectory: true)
-    }
-
-    /// Deletes files left over from earlier exports. Call before writing new ones and when the app starts.
-    static func clearShareFolder() {
-        try? FileManager.default.removeItem(at: shareFolder)
-    }
-
-    /// A fresh file URL inside the share folder, for example `makeURL(base: "Lumotion", ext: "mp4")`.
-    static func makeURL(base: String, ext: String) -> URL {
-        try? FileManager.default.createDirectory(at: shareFolder, withIntermediateDirectories: true)
-        let stamp = Int(Date().timeIntervalSince1970 * 1000) % 100_000_000
-        return shareFolder.appendingPathComponent("\(base)-\(stamp).\(ext)")
+    /// Deletes the file behind this item (used when a newer export replaces it).
+    func deleteFile() {
+        try? FileManager.default.removeItem(at: url)
     }
 }
 
@@ -70,9 +58,22 @@ enum LMFormat {
 enum LibrarySaver {
     enum SaveError: Error { case denied, failed }
 
-    /// Adds the file to the photo library. Needs the "add only" permission, which the system asks for once.
+    /// True when Lumotion may add to the library. Asks the system the first time, so call it before the slow work starts.
+    static func ensureAccess() async -> Bool {
+        switch PHPhotoLibrary.authorizationStatus(for: .addOnly) {
+        case .authorized, .limited:
+            return true
+        case .notDetermined:
+            let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+            return status == .authorized || status == .limited
+        default:
+            return false
+        }
+    }
+
+    /// Adds the file to the photo library. Needs the "add only" permission (see `ensureAccess`).
     static func save(_ item: ExportItem) async throws {
-        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        let status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
         guard status == .authorized || status == .limited else { throw SaveError.denied }
         let url = item.url
         let kind = item.kind
@@ -92,18 +93,21 @@ enum LibrarySaver {
     }
 }
 
-/// The system share sheet (Messages, WhatsApp, Instagram, TikTok and so on).
+/// The system share sheet (Messages, WhatsApp, Instagram, TikTok and so on). `onFinish` runs when it closes for any reason.
 struct ShareSheet: UIViewControllerRepresentable {
     let urls: [URL]
+    var onFinish: () -> Void = {}
 
     func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: urls, applicationActivities: nil)
+        let controller = UIActivityViewController(activityItems: urls, applicationActivities: nil)
+        controller.completionWithItemsHandler = { _, _, _, _ in onFinish() }
+        return controller
     }
 
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
-/// "Save to Files": the system document picker in export mode.
+/// "Save to Files": the system document picker in export mode. `onFinish` runs when a place was chosen or the picker was cancelled.
 struct FilesExporter: UIViewControllerRepresentable {
     let url: URL
     var onFinish: () -> Void = {}
@@ -123,6 +127,6 @@ struct FilesExporter: UIViewControllerRepresentable {
         init(onFinish: @escaping () -> Void) { self.onFinish = onFinish }
 
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) { onFinish() }
-        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {}
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { onFinish() }
     }
 }

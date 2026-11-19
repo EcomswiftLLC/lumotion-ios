@@ -16,6 +16,14 @@ enum PaintTool: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// The playback position and the current preview picture. They change about thirty times a second, so they live in their
+/// own object that only the canvas and the transport bar observe. Everything else in the editor stays still while playing.
+@MainActor
+final class PlaybackState: ObservableObject {
+    @Published var time: Double = 0
+    @Published var frame: UIImage?
+}
+
 /// The state behind the editor: the project being edited, the engine that renders it, undo and redo, autosave, and the
 /// playback clock that drives the live preview. Every change goes through `mutate`, so undo, redo, autosave and the
 /// preview all see it.
@@ -23,15 +31,25 @@ enum PaintTool: String, CaseIterable, Identifiable {
 final class EditorModel: ObservableObject {
     let store: ProjectStore
     let engine: RenderEngine
+    let playback = PlaybackState()
 
     @Published private(set) var project: Project
     @Published private(set) var assets: SourceAssets
 
+    /// Called whenever the project or its assets change, so a file exported earlier can be discarded.
+    var onChange: (@MainActor () -> Void)?
+
     // Playback
-    @Published var time: Double = 0
     @Published var isPlaying: Bool
     @Published var showingOriginal = false
-    @Published private(set) var frame: UIImage?
+
+    /// Playback position in seconds. Not published: views that show it observe `playback`.
+    var time: Double {
+        get { playback.time }
+        set { playback.time = newValue }
+    }
+    /// The current preview picture. Not published: views that show it observe `playback`.
+    var frame: UIImage? { playback.frame }
 
     // Tools
     @Published var tool: EditorTool? {
@@ -144,11 +162,48 @@ final class EditorModel: ObservableObject {
     private func projectChanged() {
         canUndo = !undoStack.isEmpty
         canRedo = !redoStack.isEmpty
+        syncAudioAsset()
         engine.update(project: project)
         let length = project.loop.clampedDuration
         if time >= length { time = 0 }
         markDirty()
         scheduleSave()
+        onChange?()
+    }
+
+    /// Keeps the audio file the engine plays in step with `project.audio`, including after undo and redo.
+    private func syncAudioAsset() {
+        var wanted: URL?
+        if let name = project.audio?.fileName, !name.isEmpty {
+            let url = store.fileURL(name, in: project.id)
+            if FileManager.default.fileExists(atPath: url.path) { wanted = url }
+        }
+        guard wanted != assets.audioURL else { return }
+        var next = assets
+        next.audioURL = wanted
+        assets = next
+        engine.update(assets: next)
+    }
+
+    /// Adds a new audio file as one undoable step. Each file gets its own name, so undo can bring the previous one back.
+    func attachAudio(from url: URL) throws {
+        var spec = try store.attachAudio(from: url, to: project.id)
+        let folder = store.folderURL(for: project.id)
+        let ext = (spec.fileName as NSString).pathExtension
+        let unique = "audio-\(UUID().uuidString.prefix(8).lowercased()).\(ext)"
+        try FileManager.default.moveItem(at: folder.appendingPathComponent(spec.fileName), to: folder.appendingPathComponent(unique))
+        spec.fileName = unique
+        mutate { $0.audio = spec }
+    }
+
+    /// Deletes audio files in the project folder that the project no longer uses. Called when the editor closes, when undo is over.
+    private func purgeUnusedAudio() {
+        let folder = store.folderURL(for: project.id)
+        let keep = project.audio?.fileName
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        for name in names where name.hasPrefix("audio") && name != keep {
+            try? FileManager.default.removeItem(at: folder.appendingPathComponent(name))
+        }
     }
 
     /// A binding to one value of the project. Changes made while a dial is dragged share one undo step.
@@ -185,6 +240,7 @@ final class EditorModel: ObservableObject {
         assets = newAssets
         engine.update(assets: newAssets)
         markDirty()
+        onChange?()
     }
 
     /// Finds the subject of the photo with Vision the first time something needs it. Does nothing when no subject is found.
@@ -257,7 +313,7 @@ final class EditorModel: ObservableObject {
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard let self else { return }
-                    if let image { self.frame = UIImage(cgImage: image) }
+                    if let image { self.playback.frame = UIImage(cgImage: image) }
                     self.renderInFlight = false
                 }
             }
@@ -289,6 +345,7 @@ final class EditorModel: ObservableObject {
         saveTask?.cancel()
         stopPreview()
         saveNow()
+        purgeUnusedAudio()
         let snapshot = engine
         let id = project.id
         let store = self.store
@@ -323,6 +380,24 @@ final class EditorModel: ObservableObject {
                 exporter.cancel()
             }
         }
+    }
+
+    /// A heads-up before exports that take a while: big pictures, high frame rates and long loops.
+    func exportWarning(for choice: ExportChoice) -> String? {
+        let seconds = project.loop.clampedDuration
+        var reasons: [String] = []
+        switch choice.format {
+        case .h264, .hevc:
+            if choice.resolution == .k4 { reasons.append("4K size") } else if choice.resolution == .k2 { reasons.append("2K size") }
+            if project.loop.fps >= 60 { reasons.append("60 frames per second") }
+            if seconds > 10 { reasons.append("a loop of \(Int(seconds.rounded())) seconds") }
+        case .gif:
+            if seconds * Double(choice.gif.clamped.fps) > 300 { reasons.append("a long GIF") }
+        case .still:
+            break
+        }
+        guard !reasons.isEmpty else { return nil }
+        return "This export is large (\(reasons.joined(separator: ", "))). It can take several minutes. Keep Lumotion open and the screen on until it finishes."
     }
 
     func exportEstimate(for choice: ExportChoice) -> String? {

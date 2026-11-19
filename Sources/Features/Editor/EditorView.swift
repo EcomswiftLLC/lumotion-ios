@@ -133,6 +133,9 @@ struct EditorContent: View {
             model.startPreview()
             exporter.renderer = model.makeExportRenderer()
             exporter.estimate = { [weak model] choice in model?.exportEstimate(for: choice) }
+            exporter.warning = { [weak model] choice in model?.exportWarning(for: choice) }
+            exporter.sourceLongSide = max(model.project.source.pixelWidth, model.project.source.pixelHeight)
+            model.onChange = { [weak exporter] in exporter?.invalidateCache() }
         }
         .onDisappear { model.stopPreview() }
         .onChange(of: scenePhase) { _, phase in
@@ -142,7 +145,7 @@ struct EditorContent: View {
             ExportScreen(
                 coordinator: exporter,
                 previewImage: model.frame,
-                hasAudio: model.project.audio != nil && model.project.audio?.muted == false,
+                hasAudio: model.project.audio != nil && model.assets.audioURL != nil && model.project.audio?.muted == false,
                 sourceLongSide: max(model.project.source.pixelWidth, model.project.source.pixelHeight)
             )
         }
@@ -190,19 +193,7 @@ struct TransportBar: View {
             LMIconButton(symbol: model.isPlaying ? "pause.fill" : "play.fill", label: model.isPlaying ? "Pause" : "Play") {
                 model.togglePlay()
             }
-            Slider(
-                value: Binding(get: { model.time }, set: { model.scrub(to: $0, editing: true) }),
-                in: 0...max(model.duration, 0.1),
-                onEditingChanged: { editing in model.scrub(to: model.time, editing: editing) }
-            )
-            .tint(LM.Palette.glow)
-            .accessibilityLabel(Text("Position in the loop"))
-            .accessibilityValue(Text("\(LMFormat.seconds(model.time)) of \(LMFormat.seconds(model.duration))"))
-            Text("\(LMFormat.seconds(model.time))")
-                .font(LM.Font.number)
-                .foregroundStyle(LM.Palette.mist)
-                .frame(minWidth: 52, alignment: .trailing)
-                .accessibilityHidden(true)
+            TransportScrubber(model: model, playback: model.playback)
             compare
         }
         .padding(.horizontal, LM.Space.s)
@@ -225,6 +216,30 @@ struct TransportBar: View {
             .accessibilityAddTraits(.isButton)
             .accessibilityAction(named: Text("Show original")) { model.showingOriginal = true; model.markDirty() }
             .accessibilityAction(named: Text("Show animation")) { model.showingOriginal = false; model.markDirty() }
+    }
+}
+
+/// The position slider and time. Observes the playback state, which changes while the loop plays.
+struct TransportScrubber: View {
+    let model: EditorModel
+    @ObservedObject var playback: PlaybackState
+
+    var body: some View {
+        HStack(spacing: LM.Space.s) {
+            Slider(
+                value: Binding(get: { playback.time }, set: { model.scrub(to: $0, editing: true) }),
+                in: 0...max(model.duration, 0.1),
+                onEditingChanged: { editing in model.scrub(to: playback.time, editing: editing) }
+            )
+            .tint(LM.Palette.glow)
+            .accessibilityLabel(Text("Position in the loop"))
+            .accessibilityValue(Text("\(LMFormat.seconds(playback.time)) of \(LMFormat.seconds(model.duration))"))
+            Text("\(LMFormat.seconds(playback.time))")
+                .font(LM.Font.number)
+                .foregroundStyle(LM.Palette.mist)
+                .frame(minWidth: 52, alignment: .trailing)
+                .accessibilityHidden(true)
+        }
     }
 }
 

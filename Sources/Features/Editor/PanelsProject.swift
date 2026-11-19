@@ -155,7 +155,8 @@ struct AudioPanel: View {
                     ToggleRow(title: "Mute", isOn: audioBinding(\.muted))
                     ParamDial(title: "Volume", value: audioBinding(\.volume), range: 0...1, defaultValue: 1, unit: "%", scale: 100)
                 }
-                if audioLength > 0 {
+                // Trimming needs a file long enough to have a range to choose from; very short sounds play whole.
+                if audioLength >= 1.0 {
                     PanelSection(title: "Trim", detail: "Choose which part of the file plays.") {
                         ParamDial(title: "Starts at", value: audioBinding(\.trimStart), range: 0...max(audioLength - 0.5, 0.5), defaultValue: 0, unit: " s", decimals: 1)
                         ParamDial(
@@ -164,7 +165,7 @@ struct AudioPanel: View {
                                 get: { audio.trimEnd ?? audioLength },
                                 set: { value in setAudio("audio-end") { $0.trimEnd = value >= audioLength - 0.05 ? nil : value } }
                             ),
-                            range: 0.5...audioLength, defaultValue: audioLength, unit: " s", decimals: 1
+                            range: 0.5...max(0.5, audioLength), defaultValue: audioLength, unit: " s", decimals: 1
                         )
                     }
                 }
@@ -213,28 +214,17 @@ struct AudioPanel: View {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do {
-            let spec = try model.store.attachAudio(from: url, to: model.project.id)
-            model.mutate { $0.audio = spec }
-            reloadAssets()
+            // The model copies the file under its own name and keeps project and playback audio in step, so undo works.
+            try model.attachAudio(from: url)
         } catch {
             errorText = error.localizedDescription
         }
     }
 
     private func removeAudio() {
+        // Only the project changes. The model drops the playback audio with it, and undo brings both back.
         model.mutate { $0.audio = nil }
-        var next = model.assets
-        next.audioURL = nil
-        model.update(assets: next)
         audioLength = 0
-    }
-
-    private func reloadAssets() {
-        if let loaded = try? model.store.loadAssets(for: model.project) {
-            var next = model.assets
-            next.audioURL = loaded.audioURL
-            model.update(assets: next)
-        }
     }
 
     private func loadLength() async {

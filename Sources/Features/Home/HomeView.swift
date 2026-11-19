@@ -8,17 +8,34 @@ struct HomeView: View {
 
     private enum PickerMode { case photo, video }
 
+    /// What the one full-screen cover shows. The camera and the editor share it, so one never gets dropped for the other.
+    private enum Cover: Identifiable {
+        case camera
+        case editor(EditorSession)
+
+        var id: String {
+            switch self {
+            case .camera: return "camera"
+            case .editor(let session): return session.id.uuidString
+            }
+        }
+    }
+
     @StateObject private var gallery = ProjectGallery()
     @State private var pickerShown = false
     @State private var pickerMode: PickerMode = .photo
     @State private var pickedItem: PhotosPickerItem?
     @State private var filesShown = false
-    @State private var cameraShown = false
     @State private var settingsShown = false
-    @State private var session: EditorSession?
+    @State private var clipSheetShown = false
+    @State private var afterClipSheet: (() -> Void)?
+    @State private var cover: Cover?
+    /// An editor to open as soon as the camera has finished closing.
+    @State private var pendingSession: EditorSession?
     @State private var loading = false
     @State private var errorMessage: String?
     @State private var samples: [SampleRef] = []
+    @State private var clips: [VideoSampleRef] = []
     @State private var heroImage: UIImage?
     @State private var renaming: ProjectSummary?
     @State private var renameText = ""
@@ -52,15 +69,35 @@ struct HomeView: View {
             guard case .success(let url) = result else { return }
             Task { await openFile(url) }
         }
-        .fullScreenCover(isPresented: $cameraShown) {
-            CameraPicker { photo in
-                cameraShown = false
-                if let photo { session = EditorSession(source: .photo(photo)) }
+        .fullScreenCover(item: $cover, onDismiss: coverDismissed) { item in
+            switch item {
+            case .camera:
+                CameraPicker { photo in
+                    if let photo { pendingSession = EditorSession(source: .photo(photo)) }
+                    cover = nil
+                }
+                .ignoresSafeArea()
+            case .editor(let session):
+                EditorView(source: session.source)
             }
-            .ignoresSafeArea()
         }
-        .fullScreenCover(item: $session, onDismiss: { Task { await gallery.reload() } }) { session in
-            EditorView(source: session.source)
+        .sheet(isPresented: $clipSheetShown, onDismiss: {
+            let next = afterClipSheet
+            afterClipSheet = nil
+            next?()
+        }) {
+            ClipStartSheet(
+                clips: clips,
+                onChoosePhotos: {
+                    afterClipSheet = { pickerMode = .video; pickerShown = true }
+                    clipSheetShown = false
+                },
+                onChooseClip: { clip in
+                    afterClipSheet = { openClip(clip) }
+                    clipSheetShown = false
+                }
+            )
+            .presentationDetents([.large])
         }
         .sheet(isPresented: $settingsShown) { SettingsView() }
         .alert("Could not open it", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
@@ -121,7 +158,7 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: LM.Space.xl) {
                     samplesSection
                     projectsSection
-                    CKInlineBanner()
+                    banner
                 }
                 .padding(.horizontal, LM.Space.l)
                 .padding(.top, LM.Space.l)
@@ -156,7 +193,7 @@ struct HomeView: View {
                 }
                 samplesSection
                 projectsSection
-                CKInlineBanner()
+                banner
             }
             .padding(.horizontal, LM.Space.m)
             .padding(.bottom, LM.Space.xl)
@@ -166,6 +203,22 @@ struct HomeView: View {
     }
 
     // MARK: Pieces
+
+    /// The Home banner ad. Left out until there is a project, so a first visit shows only Lumotion.
+    @ViewBuilder
+    private var banner: some View {
+        if !gallery.items.isEmpty { CKInlineBanner() }
+    }
+
+    private func coverDismissed() {
+        if let next = pendingSession {
+            pendingSession = nil
+            // Presenting in the same moment the camera closes can be dropped, so wait one turn.
+            DispatchQueue.main.async { cover = .editor(next) }
+        } else {
+            Task { await gallery.reload() }
+        }
+    }
 
     private var topBar: some View {
         HStack(spacing: 10) {
@@ -217,8 +270,12 @@ struct HomeView: View {
             .disabled(loading)
 
             Button {
-                pickerMode = .video
-                pickerShown = true
+                if clips.isEmpty {
+                    pickerMode = .video
+                    pickerShown = true
+                } else {
+                    clipSheetShown = true
+                }
             } label: {
                 Label("New cinemagraph from video", systemImage: "film")
             }
@@ -227,7 +284,7 @@ struct HomeView: View {
 
             HStack(spacing: LM.Space.s) {
                 if CameraPicker.isAvailable {
-                    Button { cameraShown = true } label: {
+                    Button { cover = .camera } label: {
                         Label("Camera", systemImage: "camera")
                     }
                     .buttonStyle(.apSecondaryWide)
@@ -252,7 +309,33 @@ struct HomeView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: LM.Space.s) {
                         ForEach(samples) { sample in
-                            SampleCard(sample: sample) { openSample(sample) }
+                            SampleCard(
+                                title: sample.title,
+                                label: "Sample photo, \(sample.title)",
+                                load: { Samples.image(sample, maxPixel: 400).map { UIImage(cgImage: $0) } }
+                            ) { openSample(sample) }
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+                .scrollClipDisabled()
+            }
+        }
+        if !clips.isEmpty {
+            VStack(alignment: .leading, spacing: LM.Space.s) {
+                LMSectionTitle(text: "Try a sample clip")
+                Text("A short video where you choose what keeps moving.")
+                    .font(LM.Font.callout)
+                    .foregroundStyle(LM.Palette.mist)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: LM.Space.s) {
+                        ForEach(clips) { clip in
+                            SampleCard(
+                                title: clip.title,
+                                label: "Sample clip, \(clip.title). \(clip.blurb)",
+                                isVideo: true,
+                                load: { SampleCatalog.thumbnail(for: clip) }
+                            ) { openClip(clip) }
                         }
                     }
                     .padding(.vertical, 2)
@@ -319,6 +402,7 @@ struct HomeView: View {
     private func loadSamples() async {
         let found = await Task.detached(priority: .utility) { Samples.refs() }.value
         samples = found
+        clips = await Task.detached(priority: .utility) { SampleCatalog.videos() }.value
         if let first = found.first {
             let image = await Task.detached(priority: .utility) { Samples.image(first, maxPixel: 1400).map { UIImage(cgImage: $0) } }.value
             heroImage = image
@@ -337,13 +421,13 @@ struct HomeView: View {
                 errorMessage = "Try another photo. If it is stored in iCloud, wait for it to finish downloading."
                 return
             }
-            session = EditorSession(source: .photo(photo))
+            cover = .editor(EditorSession(source: .photo(photo)))
         case .video:
             guard let url = await MediaLoader.movie(from: item) else {
                 errorMessage = "Try another video. If it is stored in iCloud, wait for it to finish downloading."
                 return
             }
-            session = EditorSession(source: .video(url))
+            cover = .editor(EditorSession(source: .video(url)))
         }
     }
 
@@ -354,7 +438,7 @@ struct HomeView: View {
             errorMessage = "Lumotion can open photos and videos. Choose a JPEG, HEIC or PNG image, or an MP4 or MOV video."
             return
         }
-        session = EditorSession(source: source)
+        cover = .editor(EditorSession(source: source))
     }
 
     private func openSample(_ sample: SampleRef) {
@@ -362,15 +446,24 @@ struct HomeView: View {
         Task {
             let photo = await Task.detached(priority: .userInitiated) { Samples.photo(sample) }.value
             loading = false
-            if let photo { session = EditorSession(source: .photo(photo)) }
+            if let photo { cover = .editor(EditorSession(source: .photo(photo))) }
             else { errorMessage = "This sample could not be opened." }
         }
+    }
+
+    /// Opens a bundled sample clip as a new cinemagraph (the project store copies it, so the bundle is never changed).
+    private func openClip(_ clip: VideoSampleRef) {
+        guard let url = SampleLibrary.videoURL(named: clip.name) else {
+            errorMessage = "This sample clip could not be opened."
+            return
+        }
+        cover = .editor(EditorSession(source: .video(url)))
     }
 
     private func openProject(_ project: ProjectSummary) {
         Task {
             if let source = await ProjectBridge.open(project.id) {
-                session = EditorSession(source: source)
+                cover = .editor(EditorSession(source: source))
             } else {
                 errorMessage = "This project could not be opened. It may have been removed from this device."
             }
@@ -378,8 +471,12 @@ struct HomeView: View {
     }
 }
 
+/// A tile for a bundled sample photo or clip. `load` makes the picture off the main thread.
 struct SampleCard: View {
-    let sample: SampleRef
+    let title: String
+    let label: String
+    var isVideo = false
+    let load: @Sendable () -> UIImage?
     let action: () -> Void
 
     @State private var image: UIImage?
@@ -394,20 +491,81 @@ struct SampleCard: View {
                         .clipped()
                 }
                 LinearGradient(colors: [Color.clear, Color.black.opacity(0.6)], startPoint: .center, endPoint: .bottom)
-                Text(sample.title)
+                Text(title)
                     .font(LM.Font.label)
                     .foregroundStyle(LM.Palette.paper)
                     .lineLimit(1)
                     .padding(10)
             }
             .frame(width: 132, height: 168)
+            .overlay(alignment: .topTrailing) {
+                if isVideo {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(LM.Palette.paper)
+                        .frame(width: 26, height: 26)
+                        .background(Color.black.opacity(0.55), in: Circle())
+                        .padding(8)
+                        .accessibilityHidden(true)
+                }
+            }
             .clipShape(RoundedRectangle(cornerRadius: LM.Radius.control, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: LM.Radius.control, style: .continuous).strokeBorder(LM.Palette.line, lineWidth: 1))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Text("Sample photo, \(sample.title)"))
+        .accessibilityLabel(Text(label))
         .task {
-            image = await Task.detached(priority: .utility) { Samples.image(sample, maxPixel: 400).map { UIImage(cgImage: $0) } }.value
+            let make = load
+            image = await Task.detached(priority: .utility) { make() }.value
         }
+    }
+}
+
+/// Start sheet for a cinemagraph: pick a video from Photos, or begin with one of the bundled sample clips.
+struct ClipStartSheet: View {
+    let clips: [VideoSampleRef]
+    let onChoosePhotos: () -> Void
+    let onChooseClip: (VideoSampleRef) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: LM.Space.l) {
+                    LMHeader(title: "New cinemagraph", subtitle: "Keep one part of a video moving while the rest holds still.")
+                    Button(action: onChoosePhotos) {
+                        Label("Choose a video from Photos", systemImage: "film")
+                    }
+                    .buttonStyle(.apPrimaryWide)
+                    if !clips.isEmpty {
+                        VStack(alignment: .leading, spacing: LM.Space.s) {
+                            LMSectionTitle(text: "Or try a sample clip")
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: LM.Space.m)], alignment: .leading, spacing: LM.Space.m) {
+                                ForEach(clips) { clip in
+                                    SampleCard(
+                                        title: clip.title,
+                                        label: "Sample clip, \(clip.title). \(clip.blurb)",
+                                        isVideo: true,
+                                        load: { SampleCatalog.thumbnail(for: clip) }
+                                    ) { onChooseClip(clip) }
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, LM.Space.m)
+                .padding(.bottom, LM.Space.xl)
+                .readableWidth()
+            }
+            .apScreen()
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Cancel") { dismiss() }.foregroundStyle(LM.Palette.glow)
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
     }
 }

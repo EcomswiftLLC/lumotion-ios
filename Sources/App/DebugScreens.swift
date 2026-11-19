@@ -22,6 +22,13 @@ enum DebugScreens {
             HomeView(debugFilled: true)
         case "settings":
             SettingsView()
+        case "editor-video":
+            // A real bundled clip, so the screenshot shows the filmstrip and the loop controls with true frames.
+            if let model = DebugFixtures.videoEditorModel() {
+                EditorView(source: .photo(DebugFixtures.photo(seed: 0)), debugModel: model)
+            } else {
+                EditorView(source: .photo(DebugFixtures.photo(seed: 0)), debugModel: DebugFixtures.editorModel(tool: .video))
+            }
         case let name where name.hasPrefix("editor"):
             let tool = name == "editor" ? nil : EditorTool(rawValue: String(name.dropFirst("editor-".count)))
             EditorView(source: .photo(DebugFixtures.photo(seed: 0)), debugModel: DebugFixtures.editorModel(tool: tool))
@@ -142,6 +149,29 @@ enum DebugFixtures {
             model.paintTool = .arrow
             model.paintTarget = .flow(region.id)
         }
+        return model
+    }
+
+    /// An editor model for a cinemagraph made from the first bundled sample clip, opened on the Video tool. Nil when the app has no clips.
+    @MainActor
+    static func videoEditorModel() -> EditorModel? {
+        let names = SampleLibrary.availableVideoNames()
+        let name = names.contains("mossy-waterfall") ? "mossy-waterfall" : names.first
+        guard let name, let url = SampleLibrary.videoURL(named: name), let info = VideoFrameStore.videoInfo(url) else { return nil }
+        var project = Project.new(
+            title: "Mossy Waterfall",
+            kind: .video,
+            fileName: url.lastPathComponent,
+            pixelWidth: Int(info.size.width.rounded()),
+            pixelHeight: Int(info.size.height.rounded()),
+            videoDuration: info.duration.isFinite ? info.duration : 0
+        )
+        let band = (0...8).map { NPoint(0.5, 0.15 + Double($0) * 0.09) }
+        project.cinemagraph.maskStrokes = [BrushStroke(points: band, radius: 0.1, feather: 0.6)]
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("LumotionDebugStore", isDirectory: true)
+        let model = EditorModel(project: project, assets: SourceAssets(videoURL: url), store: ProjectStore(rootURL: folder))
+        model.isPlaying = false
+        model.tool = .video
         return model
     }
 

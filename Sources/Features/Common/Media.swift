@@ -124,11 +124,17 @@ struct CameraPicker: UIViewControllerRepresentable {
         init(onPhoto: @escaping (PhotoSource?) -> Void) { self.onPhoto = onPhoto }
 
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-            guard let image = info[.originalImage] as? UIImage, let data = image.jpegData(compressionQuality: 0.95) else {
+            guard let image = info[.originalImage] as? UIImage else {
                 onPhoto(nil)
                 return
             }
-            onPhoto(MediaLoader.decodePhoto(data, name: "Camera"))
+            // Encoding and decoding a full-size photo takes a moment, so it happens off the main thread.
+            let onPhoto = self.onPhoto
+            Task.detached(priority: .userInitiated) {
+                let data = image.jpegData(compressionQuality: 0.95)
+                let photo = data.flatMap { MediaLoader.decodePhoto($0, name: "Camera") }
+                await MainActor.run { onPhoto(photo) }
+            }
         }
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { onPhoto(nil) }
@@ -154,6 +160,75 @@ struct SampleRef: Identifiable, Hashable {
             .map(String.init)
         guard let first = words.first else { return "Sample" }
         return ([first.prefix(1).uppercased() + first.dropFirst()] + words.dropFirst()).joined(separator: " ")
+    }
+}
+
+/// A bundled sample clip for cinemagraphs, described by `samples.json`.
+struct VideoSampleRef: Identifiable, Hashable {
+    /// File name without extension, as `SampleLibrary.videoURL(named:)` expects it.
+    let name: String
+    let title: String
+    let blurb: String
+    var id: String { name }
+}
+
+/// Reads `samples.json` (titles, descriptions and photo credits) that ships with the bundled samples.
+enum SampleCatalog {
+    private static func entries(_ key: String, bundle: Bundle) -> [[String: Any]] {
+        let candidates = [bundle.url(forResource: "samples", withExtension: "json", subdirectory: "Samples"),
+                          bundle.url(forResource: "samples", withExtension: "json")]
+        for case let url? in candidates {
+            guard let data = try? Data(contentsOf: url),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let list = object[key] as? [[String: Any]] else { continue }
+            return list
+        }
+        return []
+    }
+
+    private static func baseName(_ file: String) -> String {
+        ((file as NSString).lastPathComponent as NSString).deletingPathExtension
+    }
+
+    /// The sample clips in the order samples.json lists them, limited to the ones that are really in the app.
+    static func videos(bundle: Bundle = .main) -> [VideoSampleRef] {
+        let available = Set(SampleLibrary.availableVideoNames(bundle: bundle))
+        var result: [VideoSampleRef] = []
+        for entry in entries("videos", bundle: bundle) {
+            guard let file = entry["file"] as? String else { continue }
+            let name = baseName(file)
+            guard available.contains(name) else { continue }
+            result.append(VideoSampleRef(name: name, title: entry["title"] as? String ?? name, blurb: entry["blurb"] as? String ?? ""))
+        }
+        return result
+    }
+
+    /// One line per sample photo or clip: "Title: photographer, source".
+    static func credits(bundle: Bundle = .main) -> [String] {
+        let photos = Set(SampleLibrary.availableNames(bundle: bundle))
+        let clips = Set(SampleLibrary.availableVideoNames(bundle: bundle))
+        var lines: [String] = []
+        for entry in entries("photos", bundle: bundle) {
+            guard let file = entry["file"] as? String, photos.contains(baseName(file)),
+                  let title = entry["title"] as? String, let credit = entry["credit"] as? String else { continue }
+            lines.append("\(title): \(credit)")
+        }
+        for entry in entries("videos", bundle: bundle) {
+            guard let file = entry["file"] as? String, clips.contains(baseName(file)),
+                  let title = entry["title"] as? String, let credit = entry["credit"] as? String else { continue }
+            lines.append("\(title) (video): \(credit)")
+        }
+        return lines
+    }
+
+    /// A still from the first second of a sample clip, for its card.
+    static func thumbnail(for clip: VideoSampleRef, maxPixel: Int = 480) -> UIImage? {
+        guard let url = SampleLibrary.videoURL(named: clip.name) else { return nil }
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: maxPixel, height: maxPixel)
+        guard let image = try? generator.copyCGImage(at: CMTime(seconds: 0.5, preferredTimescale: 600), actualTime: nil) else { return nil }
+        return UIImage(cgImage: image)
     }
 }
 

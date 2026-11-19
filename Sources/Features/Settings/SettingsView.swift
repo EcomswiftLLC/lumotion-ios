@@ -32,6 +32,25 @@ struct SettingsView: View {
                         row("Rate Lumotion", symbol: "star") { requestReview() }
                     }
 
+                    if !credits.isEmpty {
+                        section("Sample credits") {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("The sample photos and clips in Lumotion come from these creators.")
+                                    .font(LM.Font.caption)
+                                    .foregroundStyle(LM.Palette.mist)
+                                ForEach(credits, id: \.self) { line in
+                                    Text(line)
+                                        .font(LM.Font.caption)
+                                        .foregroundStyle(LM.Palette.paper)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, LM.Space.s)
+                            .accessibilityElement(children: .combine)
+                        }
+                    }
+
                     section("About") {
                         LMRow(title: "Version", symbol: "info.circle", value: version, showsChevron: false)
                             .accessibilityElement(children: .combine)
@@ -57,6 +76,8 @@ struct SettingsView: View {
         }
         .preferredColorScheme(.dark)
     }
+
+    private var credits: [String] { SampleCatalog.credits() }
 
     private var version: String {
         let info = Bundle.main.infoDictionary

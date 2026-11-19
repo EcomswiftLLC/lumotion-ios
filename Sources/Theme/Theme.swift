@@ -43,11 +43,15 @@ enum LM {
 
     enum Font {
         /// Large editorial headline (New York). Tight tracking is applied by `.apDisplay`.
+        /// Serif sizes follow the person's text size setting (up to 1.6 times, so a headline never outgrows the screen).
+        private static func scaled(_ size: CGFloat, _ style: UIFont.TextStyle) -> CGFloat {
+            min(UIFontMetrics(forTextStyle: style).scaledValue(for: size), size * 1.6)
+        }
         static func display(_ size: CGFloat = 38) -> SwiftUI.Font {
-            .system(size: size, weight: .regular, design: .serif)
+            .system(size: scaled(size, .largeTitle), weight: .regular, design: .serif)
         }
         static func title(_ size: CGFloat = 24) -> SwiftUI.Font {
-            .system(size: size, weight: .medium, design: .serif)
+            .system(size: scaled(size, .title2), weight: .medium, design: .serif)
         }
         static let headline = SwiftUI.Font.system(.headline, design: .default).weight(.semibold)
         static let body = SwiftUI.Font.system(.body, design: .default)

@@ -148,7 +148,7 @@ struct DialSlider: View {
             GeometryReader { geo in
                 ruler(width: geo.size.width)
             }
-            .frame(height: 34)
+            .frame(height: 44)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(title))
@@ -193,21 +193,17 @@ struct DialSlider: View {
             context.stroke(index, with: .color(LM.Palette.glow), lineWidth: 2)
         }
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) {
-            value = defaultValue
-            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-        }
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { drag in
-                    if dragStart == nil { dragStart = value }
-                    // A tap or a resting finger is not an edit, so it must not add an undo step.
-                    if !didStartEditing && abs(drag.translation.width) >= 3 {
-                        didStartEditing = true
-                        onEditingChanged(true)
-                    }
-                    let delta = -Double(drag.translation.width) / Double(rulerWidth) * span
-                    var next = min(range.upperBound, max(range.lowerBound, (dragStart ?? value) + delta))
+        .overlay(
+            HorizontalPanArea(
+                onBegan: {
+                    dragStart = value
+                    lastTick = -1
+                    onEditingChanged(true)
+                },
+                onChanged: { translation in
+                    let start = dragStart ?? value
+                    let delta = -Double(translation) / Double(rulerWidth) * span
+                    var next = min(range.upperBound, max(range.lowerBound, start + delta))
                     if abs(next - defaultValue) < span * 0.012 { next = defaultValue }
                     let tick = Int(((next - range.lowerBound) / max(span, 0.0001)) * Double(tickCount))
                     if tick != lastTick {
@@ -215,15 +211,69 @@ struct DialSlider: View {
                         UISelectionFeedbackGenerator().selectionChanged()
                     }
                     value = next
-                }
-                .onEnded { _ in
+                },
+                onEnded: {
                     dragStart = nil
-                    if didStartEditing {
-                        didStartEditing = false
-                        onEditingChanged(false)
-                    }
+                    onEditingChanged(false)
+                },
+                onDoubleTap: {
+                    value = defaultValue
+                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
                 }
+            )
         )
+    }
+}
+
+/// A sideways drag and a double tap, written with UIKit so a mostly vertical swipe starts no drag at all and the panel
+/// around the dial still scrolls. A tap or a resting finger never counts as an edit.
+struct HorizontalPanArea: UIViewRepresentable {
+    var onBegan: () -> Void
+    var onChanged: (CGFloat) -> Void
+    var onEnded: () -> Void
+    var onDoubleTap: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .clear
+        let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.pan(_:)))
+        pan.delegate = context.coordinator
+        view.addGestureRecognizer(pan)
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.doubleTap(_:)))
+        tap.numberOfTapsRequired = 2
+        view.addGestureRecognizer(tap)
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        context.coordinator.parent = self
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var parent: HorizontalPanArea?
+
+        @objc func pan(_ recognizer: UIPanGestureRecognizer) {
+            guard let parent else { return }
+            let x = recognizer.translation(in: recognizer.view).x
+            switch recognizer.state {
+            case .began: parent.onBegan(); parent.onChanged(x)
+            case .changed: parent.onChanged(x)
+            case .ended, .cancelled, .failed: parent.onEnded()
+            default: break
+            }
+        }
+
+        @objc func doubleTap(_ recognizer: UITapGestureRecognizer) {
+            if recognizer.state == .ended { parent?.onDoubleTap() }
+        }
+
+        func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = recognizer as? UIPanGestureRecognizer else { return true }
+            let velocity = pan.velocity(in: pan.view)
+            return abs(velocity.x) > abs(velocity.y)
+        }
     }
 }
 

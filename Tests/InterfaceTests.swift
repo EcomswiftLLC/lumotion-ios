@@ -25,11 +25,12 @@ final class InterfaceTests: XCTestCase {
         XCTAssertEqual(png.utType, .png)
     }
 
-    func testShareFolderIsCleared() throws {
-        let url = ExportItem.makeURL(base: "test", ext: "txt")
+    func testExportsFolderIsCleared() throws {
+        try FileManager.default.createDirectory(at: Exporter.exportsFolder, withIntermediateDirectories: true)
+        let url = Exporter.exportsFolder.appendingPathComponent("test-\(UUID().uuidString).txt")
         try Data("x".utf8).write(to: url)
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
-        ExportItem.clearShareFolder()
+        Exporter.clearOldExports(olderThan: 0)
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
 
@@ -72,6 +73,48 @@ final class InterfaceTests: XCTestCase {
         for direction in PanDirection.allCases {
             XCTAssertNotNil(UIImage(systemName: Labels.directionSymbol(direction)))
         }
+    }
+
+    @MainActor
+    func testResolutionIsClampedToWhatIsOffered() {
+        let coordinator = ExportCoordinator()
+        coordinator.sourceLongSide = 900
+        coordinator.choice.resolution = .k4
+        coordinator.clampChoice()
+        XCTAssertTrue(coordinator.offeredResolutions(for: .h264).contains(coordinator.choice.resolution))
+        XCTAssertNotEqual(coordinator.choice.resolution, .p1080, "A small photo is not offered 1080p")
+        XCTAssertFalse(coordinator.isBusy)
+    }
+
+    @MainActor
+    func testPaintAreaIsOneUndoStepAndCoversTheArea() {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 400, height: 500), format: format).image { context in
+            UIColor.darkGray.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 400, height: 500))
+        }.cgImage!
+        let project = Project.new(title: "Test", kind: .still, fileName: "source.jpg", pixelWidth: 400, pixelHeight: 500)
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("LumotionTestStore-\(UUID().uuidString)", isDirectory: true)
+        let model = EditorModel(project: project, assets: SourceAssets(still: image), store: ProjectStore(rootURL: folder))
+        model.paintArea(.lower, target: .cinemagraph)
+        XCTAssertEqual(model.project.cinemagraph.maskStrokes.count, 1)
+        let points = model.project.cinemagraph.maskStrokes[0].points
+        XCTAssertGreaterThan(points.count, 10)
+        XCTAssertTrue(points.allSatisfy { $0.y >= 0.5 - 0.0001 && $0.y <= 1 && $0.x >= 0 && $0.x <= 1 }, "Points stay inside the lower half")
+        model.undo()
+        XCTAssertTrue(model.project.cinemagraph.maskStrokes.isEmpty)
+    }
+
+    @MainActor
+    func testLargeExportsGetAWarning() {
+        let project = Project.new(title: "Test", kind: .still, fileName: "source.jpg", pixelWidth: 400, pixelHeight: 500)
+        let model = EditorModel(project: project, assets: SourceAssets(), store: ProjectStore(rootURL: FileManager.default.temporaryDirectory.appendingPathComponent("LumotionTestStore-\(UUID().uuidString)", isDirectory: true)))
+        var choice = ExportChoice()
+        choice.resolution = .p720
+        XCTAssertNil(model.exportWarning(for: choice))
+        choice.resolution = .k4
+        XCTAssertNotNil(model.exportWarning(for: choice))
     }
 
     func testRewardedPolicyGrace() {

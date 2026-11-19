@@ -51,8 +51,6 @@
 	<false/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<false/>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Lumotion opens the photos you choose to edit. Your photos stay on your device and are never uploaded.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Lumotion saves your finished videos, GIFs and stills to your library.</string>
 	<key>NSCameraUsageDescription</key>

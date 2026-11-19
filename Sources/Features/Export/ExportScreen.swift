@@ -12,21 +12,16 @@ struct ExportActionBar: View {
                 HStack(spacing: 8) {
                     if coordinator.isBusy { ProgressView().tint(LM.Palette.onGlow) }
                     Image(systemName: "square.and.arrow.down")
-                    Text(coordinator.isBusy ? "Creating" : "Save to Photos")
+                    Text(coordinator.isStopping ? "Stopping" : (coordinator.isBusy ? "Creating" : "Save to Photos"))
                 }
             }
             .buttonStyle(.apPrimaryWide)
             .disabled(coordinator.isBusy)
 
-            HStack(spacing: LM.Space.s) {
-                Button { coordinator.perform(.share) } label: {
-                    Label("Share", systemImage: "square.and.arrow.up").lineLimit(1).minimumScaleFactor(0.8)
-                }
-                .buttonStyle(.apSecondaryWide)
-                Button { coordinator.perform(.files) } label: {
-                    Label("Save to Files", systemImage: "folder").lineLimit(1).minimumScaleFactor(0.8)
-                }
-                .buttonStyle(.apSecondaryWide)
+            // Side by side when there is room; stacked at large text sizes so neither label is cut off.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: LM.Space.s) { shareButton; filesButton }
+                VStack(spacing: LM.Space.s) { shareButton; filesButton }
             }
             .disabled(coordinator.isBusy)
 
@@ -34,7 +29,7 @@ struct ExportActionBar: View {
         }
         .sheet(isPresented: Binding(get: { coordinator.shareURL != nil }, set: { if !$0 { coordinator.shareURL = nil } })) {
             if let url = coordinator.shareURL {
-                ShareSheet(urls: [url])
+                ShareSheet(urls: [url]) { coordinator.shareURL = nil }
                     .presentationDetents([.medium, .large])
                     .ignoresSafeArea()
             }
@@ -45,6 +40,20 @@ struct ExportActionBar: View {
                     .ignoresSafeArea()
             }
         }
+    }
+
+    private var shareButton: some View {
+        Button { coordinator.perform(.share) } label: {
+            Label("Share", systemImage: "square.and.arrow.up").lineLimit(1)
+        }
+        .buttonStyle(.apSecondaryWide)
+    }
+
+    private var filesButton: some View {
+        Button { coordinator.perform(.files) } label: {
+            Label("Save to Files", systemImage: "folder").lineLimit(1)
+        }
+        .buttonStyle(.apSecondaryWide)
     }
 
     @ViewBuilder
@@ -85,6 +94,7 @@ struct ExportScreen: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var hSize
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         NavigationStack {
@@ -126,6 +136,11 @@ struct ExportScreen: View {
         .preferredColorScheme(.dark)
         .interactiveDismissDisabled(coordinator.isBusy)
         .onChange(of: coordinator.choice) { _, _ in coordinator.clearStatus() }
+        .onChange(of: scenePhase) { _, phase in coordinator.sceneChanged(active: phase == .active) }
+        .onAppear {
+            coordinator.sourceLongSide = sourceLongSide
+            coordinator.clampChoice()
+        }
     }
 
     @ViewBuilder
@@ -146,14 +161,14 @@ struct ExportScreen: View {
     private var controls: some View {
         optionsSection
         estimateLine
+        warningLine
         progressSection
         ExportActionBar(coordinator: coordinator)
     }
 
     private var resolutions: [ExportResolution] {
-        let supported = Exporter.supportedResolutions(codec: coordinator.choice.codec ?? .h264)
-        let fitting = supported.filter { $0.longEdge <= max(1280, sourceLongSide) }
-        return fitting.isEmpty ? supported : fitting
+        coordinator.sourceLongSide = sourceLongSide
+        return coordinator.offeredResolutions(for: coordinator.choice.codec ?? .h264)
     }
 
     private var formats: [ExportChoice.Format] {
@@ -168,9 +183,8 @@ struct ExportScreen: View {
                     ForEach(formats) { format in
                         LMChip(title: format.title, selected: coordinator.choice.format == format) {
                             coordinator.choice.format = format
-                            if let codec = format.videoCodec, !Exporter.supportedResolutions(codec: codec).contains(coordinator.choice.resolution) {
-                                coordinator.choice.resolution = Exporter.supportedResolutions(codec: codec).last ?? .p720
-                            }
+                            coordinator.sourceLongSide = sourceLongSide
+                            coordinator.clampChoice()
                         }
                     }
                 }
@@ -253,6 +267,23 @@ struct ExportScreen: View {
     }
 
     @ViewBuilder
+    private var warningLine: some View {
+        if let text = coordinator.warning?(coordinator.choice) {
+            Label(text, systemImage: "clock")
+                .font(LM.Font.callout)
+                .foregroundStyle(LM.Palette.mist)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var etaText: String? {
+        guard coordinator.phase == .rendering, let seconds = coordinator.remainingSeconds else { return nil }
+        if seconds < 5 { return "Almost done" }
+        if seconds < 90 { return "About \(Int((seconds / 5).rounded()) * 5) seconds left" }
+        return "About \(Int((seconds / 60).rounded())) minutes left"
+    }
+
+    @ViewBuilder
     private var progressSection: some View {
         if coordinator.isBusy {
             VStack(alignment: .leading, spacing: LM.Space.s) {
@@ -260,14 +291,25 @@ struct ExportScreen: View {
                     .tint(LM.Palette.glow)
                     .accessibilityLabel(Text("Export progress"))
                     .accessibilityValue(Text("\(Int(coordinator.progress * 100)) percent"))
-                HStack {
-                    Text("Creating your \(coordinator.choice.format == .still ? "image" : "animation")")
-                        .font(LM.Font.callout).foregroundStyle(LM.Palette.mist)
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(coordinator.isStopping ? "Stopping" : "Creating your \(coordinator.choice.format == .still ? "image" : "animation")")
+                            .font(LM.Font.callout).foregroundStyle(LM.Palette.mist)
+                        if let etaText {
+                            Text(etaText).font(LM.Font.caption).foregroundStyle(LM.Palette.mist)
+                        }
+                    }
                     Spacer()
-                    Button("Cancel") { coordinator.cancel() }
-                        .font(LM.Font.label)
-                        .foregroundStyle(LM.Palette.glow)
-                        .frame(minHeight: 44)
+                    if coordinator.phase == .rendering {
+                        Button("Cancel") { coordinator.cancel() }
+                            .font(LM.Font.label)
+                            .foregroundStyle(LM.Palette.glow)
+                            .frame(minHeight: 44)
+                    }
+                }
+                if coordinator.phase == .rendering {
+                    Label("Keep Lumotion open while exporting", systemImage: "iphone")
+                        .font(LM.Font.caption).foregroundStyle(LM.Palette.mist)
                 }
             }
         }

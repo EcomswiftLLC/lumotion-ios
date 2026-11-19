@@ -7,8 +7,8 @@ struct LumotionApp: App {
 
     init() {
         LMAppearance.configure()
-        // Files written only for the share sheet or an import in an earlier session are no longer needed.
-        ExportItem.clearShareFolder()
+        // Exports and imports left over from an earlier session are no longer needed.
+        Exporter.clearOldExports(olderThan: 0)
         MediaLoader.clearImportFolder()
     }
 

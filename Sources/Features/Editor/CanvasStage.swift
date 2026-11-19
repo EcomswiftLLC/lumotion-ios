@@ -65,6 +65,55 @@ struct CanvasMapping {
     var cropSize: (w: Double, h: Double) { (crop.w, crop.h) }
 }
 
+/// Areas of the photo a VoiceOver user can paint in one action.
+enum PaintArea: CaseIterable {
+    case whole, lower, upper, left, right, centre
+
+    var title: String {
+        switch self {
+        case .whole: return "the whole photo"
+        case .lower: return "the lower half"
+        case .upper: return "the upper half"
+        case .left: return "the left half"
+        case .right: return "the right half"
+        case .centre: return "the centre"
+        }
+    }
+
+    var rect: (minX: Double, maxX: Double, minY: Double, maxY: Double) {
+        switch self {
+        case .whole: return (0, 1, 0, 1)
+        case .lower: return (0, 1, 0.5, 1)
+        case .upper: return (0, 1, 0, 0.5)
+        case .left: return (0, 0.5, 0, 1)
+        case .right: return (0.5, 1, 0, 1)
+        case .centre: return (0.25, 0.75, 0.25, 0.75)
+        }
+    }
+}
+
+enum ArrowDirection: CaseIterable {
+    case right, left, up, down
+
+    var title: String {
+        switch self {
+        case .right: return "right"
+        case .left: return "left"
+        case .up: return "up"
+        case .down: return "down"
+        }
+    }
+
+    var arrow: FlowArrow {
+        switch self {
+        case .right: return FlowArrow(from: NPoint(0.3, 0.5), to: NPoint(0.7, 0.5))
+        case .left: return FlowArrow(from: NPoint(0.7, 0.5), to: NPoint(0.3, 0.5))
+        case .up: return FlowArrow(from: NPoint(0.5, 0.7), to: NPoint(0.5, 0.3))
+        case .down: return FlowArrow(from: NPoint(0.5, 0.3), to: NPoint(0.5, 0.7))
+        }
+    }
+}
+
 extension EditorModel {
     var mapping: CanvasMapping {
         CanvasMapping(canvasAspect: canvasAspect, sourceAspect: project.source.aspect, spec: project.canvas)
@@ -91,6 +140,85 @@ extension EditorModel {
             erase: paintTool == .erase,
             value: depthValue
         )
+        append(stroke, to: target)
+    }
+
+    /// Paints (or erases, with the Erase tool) a whole area of the photo in one step, for people who cannot drag on the preview.
+    func paintArea(_ area: PaintArea, target: PaintTarget) {
+        let radius = max(brushRadius, 0.08)
+        // Rows of points, close enough together that the brush covers the whole area.
+        let aspect = max(project.source.aspect, 0.2)
+        let rowStep = (aspect >= 1 ? radius * aspect : radius) * 1.4
+        let columnStep = 0.05
+        let rect = area.rect
+        var points: [NPoint] = []
+        var y = rect.minY + min(rowStep / 2, (rect.maxY - rect.minY) / 2)
+        var leftToRight = true
+        while y <= rect.maxY + 0.0001 {
+            var xs: [Double] = []
+            var x = rect.minX
+            while x < rect.maxX { xs.append(x); x += columnStep }
+            xs.append(rect.maxX)
+            if !leftToRight { xs.reverse() }
+            for x in xs { points.append(NPoint(x, min(y, 1))) }
+            leftToRight.toggle()
+            y += rowStep
+        }
+        guard !points.isEmpty else { return }
+        let stroke = BrushStroke(points: points, radius: radius, feather: brushFeather, erase: paintTool == .erase, value: depthValue)
+        append(stroke, to: target)
+        LMHaptics.tap()
+    }
+
+    /// Adds an arrow to the selected flow area from a direction, for people who cannot drag on the preview.
+    func addArrow(_ direction: ArrowDirection, flow id: UUID) {
+        let arrow = direction.arrow
+        mutate { project in
+            if let r = project.flowRegions.firstIndex(where: { $0.id == id }) { project.flowRegions[r].arrows.append(arrow) }
+        }
+        selectedArrow = max(0, (project.flowRegions.first(where: { $0.id == id })?.arrows.count ?? 1) - 1)
+        LMHaptics.tap()
+    }
+
+    /// Removes the last arrow of a flow area.
+    func removeLastArrow(flow id: UUID) {
+        mutate { project in
+            if let r = project.flowRegions.firstIndex(where: { $0.id == id }), !project.flowRegions[r].arrows.isEmpty {
+                project.flowRegions[r].arrows.removeLast()
+            }
+        }
+        selectedArrow = nil
+    }
+
+    /// Moves the selected text or sticker by a share of the preview.
+    func nudgeSelectedLayer(dx: Double, dy: Double) {
+        func moved(_ p: NPoint) -> NPoint { NPoint(min(max(p.x + dx, 0), 1), min(max(p.y + dy, 0), 1)) }
+        if let id = selectedText {
+            mutate { p in if let i = p.texts.firstIndex(where: { $0.id == id }) { p.texts[i].center = moved(p.texts[i].center) } }
+        } else if let id = selectedSticker {
+            mutate { p in if let i = p.stickers.firstIndex(where: { $0.id == id }) { p.stickers[i].center = moved(p.stickers[i].center) } }
+        }
+    }
+
+    /// Makes the selected text or sticker larger or smaller.
+    func scaleSelectedLayer(by factor: Double) {
+        if let id = selectedText {
+            mutate { p in if let i = p.texts.firstIndex(where: { $0.id == id }) { p.texts[i].scale = min(max(p.texts[i].scale * factor, 0.2), 6) } }
+        } else if let id = selectedSticker {
+            mutate { p in if let i = p.stickers.firstIndex(where: { $0.id == id }) { p.stickers[i].scale = min(max(p.stickers[i].scale * factor, 0.2), 6) } }
+        }
+    }
+
+    /// Moves the crop of a filled canvas, or zooms it.
+    func reframe(dx: Double, dy: Double, zoomBy factor: Double = 1) {
+        mutate { p in
+            p.canvas.centerX = min(max(p.canvas.centerX + dx, 0), 1)
+            p.canvas.centerY = min(max(p.canvas.centerY + dy, 0), 1)
+            p.canvas.zoom = min(max(p.canvas.zoom * factor, 1), 4)
+        }
+    }
+
+    private func append(_ stroke: BrushStroke, to target: PaintTarget) {
         mutate { project in
             switch target {
             case .flow(let id):
@@ -148,14 +276,7 @@ struct CanvasStage: View {
             let box = fitted(in: geo.size)
             ZStack {
                 LM.Palette.carbon
-                if let frame = model.frame {
-                    Image(uiImage: frame)
-                        .resizable()
-                        .interpolation(.medium)
-                        .frame(width: box.width, height: box.height)
-                } else {
-                    ProgressView().tint(LM.Palette.mist)
-                }
+                StageFrame(playback: model.playback, box: box)
                 canvasOverlay(size: box)
                 if model.showingOriginal {
                     Text("Original")
@@ -174,8 +295,20 @@ struct CanvasStage: View {
             .position(x: geo.size.width / 2, y: geo.size.height / 2)
         }
         .padding(LM.Space.s)
-        .accessibilityElement(children: .contain)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Preview of your animation"))
+        .accessibilityValue(Text(accessibilityHint))
+        .modifier(StageAccessibilityActions(model: model))
+    }
+
+    /// Tells a VoiceOver user what the actions of the preview do right now.
+    private var accessibilityHint: String {
+        if model.paintTarget != nil { return "Painting. Use the actions menu to paint an area or add arrows without dragging." }
+        if model.tool == .text && (model.selectedText != nil || model.selectedSticker != nil) {
+            return "A text or sticker is selected. Use the actions menu to move or resize it."
+        }
+        if model.tool == .canvas && model.project.canvas.fit == .fill { return "Use the actions menu to move the crop or zoom." }
+        return ""
     }
 
     private func fitted(in available: CGSize) -> CGSize {
@@ -196,6 +329,72 @@ struct CanvasStage: View {
             ReframeOverlay(model: model, size: size)
         }
     }
+}
+
+/// The preview picture. Observes only the playback state, so the rest of the editor does not redraw while it plays.
+struct StageFrame: View {
+    @ObservedObject var playback: PlaybackState
+    let box: CGSize
+
+    var body: some View {
+        if let frame = playback.frame {
+            Image(uiImage: frame)
+                .resizable()
+                .interpolation(.medium)
+                .frame(width: box.width, height: box.height)
+        } else {
+            ProgressView().tint(LM.Palette.mist)
+        }
+    }
+}
+
+/// Accessible alternatives to the gestures on the preview: painting, arrows, moving and resizing layers, and reframing.
+struct StageAccessibilityActions: ViewModifier {
+    @ObservedObject var model: EditorModel
+
+    private var flowID: UUID? {
+        if case .flow(let id)? = model.paintTarget { return id }
+        return nil
+    }
+
+    func body(content: Content) -> some View {
+        content.accessibilityActions {
+            if let target = model.paintTarget {
+                if let flow = flowID, model.paintTool == .arrow {
+                    Button("Add arrow pointing right") { model.addArrow(.right, flow: flow) }
+                    Button("Add arrow pointing left") { model.addArrow(.left, flow: flow) }
+                    Button("Add arrow pointing up") { model.addArrow(.up, flow: flow) }
+                    Button("Add arrow pointing down") { model.addArrow(.down, flow: flow) }
+                    Button("Remove last arrow") { model.removeLastArrow(flow: flow) }
+                } else {
+                    Button("\(verb) the whole photo") { model.paintArea(.whole, target: target) }
+                    Button("\(verb) the lower half") { model.paintArea(.lower, target: target) }
+                    Button("\(verb) the upper half") { model.paintArea(.upper, target: target) }
+                    Button("\(verb) the left half") { model.paintArea(.left, target: target) }
+                    Button("\(verb) the right half") { model.paintArea(.right, target: target) }
+                    Button("\(verb) the centre") { model.paintArea(.centre, target: target) }
+                    Button("Remove last stroke") { model.removeLastStroke(target: target) }
+                    Button("Remove all strokes") { model.clearStrokes(target: target) }
+                }
+            } else if model.tool == .text && (model.selectedText != nil || model.selectedSticker != nil) {
+                Button("Move up") { model.nudgeSelectedLayer(dx: 0, dy: -0.05) }
+                Button("Move down") { model.nudgeSelectedLayer(dx: 0, dy: 0.05) }
+                Button("Move left") { model.nudgeSelectedLayer(dx: -0.05, dy: 0) }
+                Button("Move right") { model.nudgeSelectedLayer(dx: 0.05, dy: 0) }
+                Button("Make larger") { model.scaleSelectedLayer(by: 1.15) }
+                Button("Make smaller") { model.scaleSelectedLayer(by: 1 / 1.15) }
+            } else if model.tool == .canvas && model.project.canvas.fit == .fill {
+                Button("Move the crop up") { model.reframe(dx: 0, dy: -0.05) }
+                Button("Move the crop down") { model.reframe(dx: 0, dy: 0.05) }
+                Button("Move the crop left") { model.reframe(dx: -0.05, dy: 0) }
+                Button("Move the crop right") { model.reframe(dx: 0.05, dy: 0) }
+                Button("Zoom in") { model.reframe(dx: 0, dy: 0, zoomBy: 1.2) }
+                Button("Zoom out") { model.reframe(dx: 0, dy: 0, zoomBy: 1 / 1.2) }
+            }
+        }
+    }
+
+    private var verb: String { model.paintTool == .erase ? "Erase" : "Paint" }
 }
 
 // MARK: - Painting and arrows
