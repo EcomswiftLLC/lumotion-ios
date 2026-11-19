@@ -22,6 +22,8 @@ enum DebugScreens {
             HomeView(debugFilled: true)
         case "settings":
             SettingsView()
+        case let name where name.hasPrefix("shot-"):
+            StoreScreens.view(for: String(name.dropFirst("shot-".count)))
         case "editor-video":
             // A real bundled clip, so the screenshot shows the filmstrip and the loop controls with true frames.
             if let model = DebugFixtures.videoEditorModel() {

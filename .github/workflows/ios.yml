@@ -9,6 +9,10 @@ env:
   # Every screen the debug build can open directly with `-lmScreen <name>` (see Sources/App/DebugScreens.swift).
   SCREENS: "onboarding home home-filled settings editor editor-presets editor-flow editor-video editor-camera editor-depth editor-effects editor-overlays editor-looks editor-text editor-audio editor-canvas editor-timing editor-layers export"
 
+  # The store captures (`-lmScreen shot-<name>`, see Sources/App/StoreScreens.swift): real bundled photos and clips, real views.
+  # They are saved under exactly these names in the store-iphone and store-ipad artifacts.
+  STORE_SHOTS: "home-filled editor-flow editor-video editor-depth editor-camera editor-effects editor-overlays editor-presets editor-looks export"
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
@@ -81,6 +85,26 @@ jobs:
             xcrun simctl io "$DEST" screenshot "shots/$SCREEN.png" || true
           done
           ls shots
+      - name: Take store captures
+        run: |
+          DEST=$(cat build/dest.txt)
+          # A clean status bar (9:41, full battery and signal), as on the store listing.
+          xcrun simctl status_bar "$DEST" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4 || true
+          mkdir -p store
+          for SHOT in $STORE_SHOTS; do
+            xcrun simctl terminate "$DEST" com.ecomswift.lumotion || true
+            xcrun simctl launch "$DEST" com.ecomswift.lumotion -lmNoAds YES -lmScreen "shot-$SHOT" || true
+            sleep 16
+            xcrun simctl io "$DEST" screenshot "store/$SHOT.png" || true
+          done
+          xcrun simctl status_bar "$DEST" clear || true
+          ls store
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: store-iphone
+          path: store
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -130,6 +154,25 @@ jobs:
             xcrun simctl io "$DEST" screenshot "shots/$SCREEN.png" || true
           done
           ls shots
+      - name: Take store captures
+        run: |
+          DEST=$(cat build/dest.txt)
+          xcrun simctl status_bar "$DEST" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 || true
+          mkdir -p store
+          for SHOT in $STORE_SHOTS; do
+            xcrun simctl terminate "$DEST" com.ecomswift.lumotion || true
+            xcrun simctl launch "$DEST" com.ecomswift.lumotion -lmNoAds YES -lmScreen "shot-$SHOT" || true
+            sleep 16
+            xcrun simctl io "$DEST" screenshot "store/$SHOT.png" || true
+          done
+          xcrun simctl status_bar "$DEST" clear || true
+          ls store
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: store-ipad
+          path: store
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         if: always()
         with:

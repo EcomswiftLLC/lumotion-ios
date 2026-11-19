@@ -5,6 +5,8 @@ import UniformTypeIdentifiers
 struct HomeView: View {
     /// Debug screenshots only: fills the screen with sample content (see DebugScreens).
     var debugFilled = false
+    /// Debug store captures only: the projects are renders of real sample photos, and the page is scrolled to the samples.
+    var debugStore = false
 
     private enum PickerMode { case photo, video }
 
@@ -127,7 +129,8 @@ struct HomeView: View {
         .task {
             await ProjectBridge.attach(to: gallery)
             #if DEBUG
-            if debugFilled { await DebugFixtures.fill(gallery) }
+            if debugFilled && debugStore { await StoreScreens.fill(gallery) }
+            else if debugFilled { await DebugFixtures.fill(gallery) }
             #endif
             if !debugFilled { await gallery.reload() }
             await loadSamples()
@@ -169,6 +172,21 @@ struct HomeView: View {
     }
 
     private func stackedLayout(landscape: Bool) -> some View {
+        ScrollViewReader { proxy in
+            stackedContent(landscape: landscape)
+                .task {
+                    #if DEBUG
+                    // Store captures show the samples and projects, as if the person had scrolled down to them.
+                    if debugStore {
+                        try? await Task.sleep(nanoseconds: 4_000_000_000)
+                        withAnimation(nil) { proxy.scrollTo("home-samples", anchor: .top) }
+                    }
+                    #endif
+                }
+        }
+    }
+
+    private func stackedContent(landscape: Bool) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: LM.Space.xl) {
                 topBar
@@ -191,7 +209,7 @@ struct HomeView: View {
                         actions
                     }
                 }
-                samplesSection
+                VStack(alignment: .leading, spacing: LM.Space.xl) { samplesSection }.id("home-samples")
                 projectsSection
                 banner
             }
