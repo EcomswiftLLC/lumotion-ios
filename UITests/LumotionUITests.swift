@@ -86,7 +86,7 @@ final class FirstRunUITests: XCTestCase {
         }
         let app = XCUIApplication()
         // The launch argument overrides the stored value, so every run starts on the welcome screen.
-        app.launchArguments = ["-lm.hasOnboarded", "NO"]
+        app.launchArguments = ["-lm.hasOnboarded", "NO", "-lmNoAds", "YES"]
         app.launch()
 
         let getStarted = app.buttons["Get started"]

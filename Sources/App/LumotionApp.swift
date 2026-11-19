@@ -71,6 +71,8 @@ struct RootView: View {
     private func startAdsWhenReady() async {
         #if DEBUG
         if DebugScreens.requested != nil { return }
+        // UI tests pass `-lmNoAds YES` so Google's consent form (shown by region) cannot cover the controls under test.
+        if UserDefaults.standard.bool(forKey: "lmNoAds") { return }
         #endif
         guard appState.hasOnboarded, !adsStarted else { return }
         try? await Task.sleep(nanoseconds: 400_000_000)
