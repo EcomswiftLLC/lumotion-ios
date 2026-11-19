@@ -232,7 +232,12 @@ final class VideoFrameStore {
             let k = min(Double(videoSize.width) / w, Double(videoSize.height) / h)
             w *= k; h *= k
         }
-        let fw = max(16, Int((w / 2).rounded()) * 2), fh = max(16, Int((h / 2).rounded()) * 2)
+        var fw = max(16, Int((w / 2).rounded()) * 2), fh = max(16, Int((h / 2).rounded()) * 2)
+        // Rounding to even sizes can overshoot the budget by a few kilobytes; step down until the frames fit.
+        while fw > 16 && count * fw * fh * 4 > budgetBytes {
+            fw -= 2
+            fh = max(16, Int((Double(fw) / aspect / 2).rounded()) * 2)
+        }
         return VideoFramePlan(segmentStart: segStart, segmentLength: segLength, fps: fps, count: count, width: fw, height: fh)
     }
 
