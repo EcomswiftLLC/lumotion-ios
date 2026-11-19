@@ -40,6 +40,22 @@ jobs:
       - name: Compiler errors (if any)
         if: failure()
         run: grep -E "error:" build/test.log | sort -u | head -80 || true
+      - name: Collect crash evidence
+        if: failure()
+        run: |
+          mkdir -p crash
+          ls -la ~/Library/Logs/DiagnosticReports > crash/listing.txt 2>&1 || true
+          cp ~/Library/Logs/DiagnosticReports/Lumotion* crash/ 2>/dev/null || true
+          cp ~/Library/Logs/DiagnosticReports/*.crash crash/ 2>/dev/null || true
+          cp ~/Library/Logs/DiagnosticReports/*.ips crash/ 2>/dev/null || true
+          xcrun simctl spawn booted log show --last 10m --predicate 'process == "Lumotion"' > crash/simulator-log.txt 2>&1 || true
+          ls crash
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: crash-reports-unit
+          path: crash
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -220,6 +236,22 @@ jobs:
           name: screenshots-ipad-landscape
           path: shots-landscape
           if-no-files-found: ignore
+      - name: Collect crash evidence
+        if: failure()
+        run: |
+          mkdir -p crash
+          ls -la ~/Library/Logs/DiagnosticReports > crash/listing.txt 2>&1 || true
+          cp ~/Library/Logs/DiagnosticReports/Lumotion* crash/ 2>/dev/null || true
+          cp ~/Library/Logs/DiagnosticReports/*.ips crash/ 2>/dev/null || true
+          xcrun simctl spawn booted log show --last 15m --predicate 'process == "Lumotion"' > crash/simulator-log.txt 2>&1 || true
+          xcrun xcresulttool get test-results summary --path build/ui.xcresult > crash/xcresult-summary.json 2>&1 || true
+          ls crash
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: crash-reports-ipad
+          path: crash
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -260,6 +292,22 @@ jobs:
         with:
           name: screenshots-iphone-landscape
           path: shots-landscape-iphone
+          if-no-files-found: ignore
+      - name: Collect crash evidence
+        if: failure()
+        run: |
+          mkdir -p crash
+          ls -la ~/Library/Logs/DiagnosticReports > crash/listing.txt 2>&1 || true
+          cp ~/Library/Logs/DiagnosticReports/Lumotion* crash/ 2>/dev/null || true
+          cp ~/Library/Logs/DiagnosticReports/*.ips crash/ 2>/dev/null || true
+          xcrun simctl spawn booted log show --last 15m --predicate 'process == "Lumotion"' > crash/simulator-log.txt 2>&1 || true
+          xcrun xcresulttool get test-results summary --path build/ui-iphone.xcresult > crash/xcresult-summary.json 2>&1 || true
+          ls crash
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: crash-reports-iphone
+          path: crash
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         if: always()
