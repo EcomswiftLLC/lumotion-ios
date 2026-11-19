@@ -172,18 +172,7 @@ struct HomeView: View {
     }
 
     private func stackedLayout(landscape: Bool) -> some View {
-        ScrollViewReader { proxy in
-            stackedContent(landscape: landscape)
-                .task {
-                    #if DEBUG
-                    // Store captures show the samples and projects, as if the person had scrolled down to them.
-                    if debugStore {
-                        try? await Task.sleep(nanoseconds: 4_000_000_000)
-                        withAnimation(nil) { proxy.scrollTo("home-samples", anchor: .top) }
-                    }
-                    #endif
-                }
-        }
+        stackedContent(landscape: landscape)
     }
 
     private func stackedContent(landscape: Bool) -> some View {
@@ -210,8 +199,6 @@ struct HomeView: View {
                     }
                 }
                 VStack(alignment: .leading, spacing: LM.Space.xl) { samplesSection }
-                    .padding(.top, LM.Space.s)
-                    .id("home-samples")
                 projectsSection
                 banner
             }

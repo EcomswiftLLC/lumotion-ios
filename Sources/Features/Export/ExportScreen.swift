@@ -99,7 +99,8 @@ struct ExportScreen: View {
     var body: some View {
         NavigationStack {
             GeometryReader { geo in
-                let sideBySide = geo.size.width >= 760
+                // Side by side only when the screen is wider than tall; an upright iPad stacks the preview over the options.
+                let sideBySide = geo.size.width >= 760 && geo.size.width > geo.size.height
                 ScrollView {
                     Group {
                         if sideBySide {
@@ -117,7 +118,7 @@ struct ExportScreen: View {
                     }
                     .padding(.horizontal, LM.Space.m)
                     .padding(.bottom, LM.Space.xl)
-                    .readableWidth(sideBySide ? 1000 : 640)
+                    .readableWidth(sideBySide ? 1000 : (hSize == .regular ? 760 : 640))
                 }
             }
             .apScreen()
@@ -149,7 +150,7 @@ struct ExportScreen: View {
             Image(uiImage: previewImage)
                 .resizable()
                 .scaledToFit()
-                .frame(maxHeight: 420)
+                .frame(maxHeight: hSize == .regular ? 540 : 420)
                 .clipShape(RoundedRectangle(cornerRadius: LM.Radius.control, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: LM.Radius.control, style: .continuous).strokeBorder(LM.Palette.line))
                 .frame(maxWidth: .infinity)
