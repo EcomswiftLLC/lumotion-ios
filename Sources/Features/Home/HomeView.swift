@@ -209,7 +209,9 @@ struct HomeView: View {
                         actions
                     }
                 }
-                VStack(alignment: .leading, spacing: LM.Space.xl) { samplesSection }.id("home-samples")
+                VStack(alignment: .leading, spacing: LM.Space.xl) { samplesSection }
+                    .padding(.top, LM.Space.s)
+                    .id("home-samples")
                 projectsSection
                 banner
             }

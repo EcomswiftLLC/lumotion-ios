@@ -59,18 +59,20 @@ struct ProjectCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ZStack {
-                LM.Palette.graphite
-                if let image = project.thumbnail {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                } else {
-                    ApertureMark(lineWidth: 1, color: LM.Palette.mist.opacity(0.6))
-                        .frame(width: 36, height: 36)
+            Color.clear
+                .aspectRatio(4.0 / 5.0, contentMode: .fit)
+                .overlay {
+                    if let image = project.thumbnail {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        ApertureMark(lineWidth: 1, color: LM.Palette.mist.opacity(0.6))
+                            .frame(width: 36, height: 36)
+                    }
                 }
-            }
-            .aspectRatio(4.0 / 5.0, contentMode: .fit)
+                .background(LM.Palette.graphite)
+                .clipped()
             .clipShape(RoundedRectangle(cornerRadius: LM.Radius.control, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: LM.Radius.control, style: .continuous).strokeBorder(LM.Palette.line, lineWidth: 1))
             .overlay(alignment: .bottomTrailing) {
