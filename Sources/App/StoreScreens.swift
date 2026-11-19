@@ -29,8 +29,10 @@ enum StoreScreens {
             if let model = editorModel(for: name) {
                 EditorView(source: .photo(DebugFixtures.photo(seed: 0)), debugModel: model)
             } else {
-                // Samples missing from the bundle: show the generated screen so the run still produces a picture.
-                DebugScreens.view(for: name)
+                // Samples missing from the bundle: show the generated editor so the run still produces a picture.
+                // (Not DebugScreens.view: the two opaque return types would depend on each other.)
+                let tool = EditorTool(rawValue: String(name.dropFirst("editor-".count)))
+                EditorView(source: .photo(DebugFixtures.photo(seed: 0)), debugModel: DebugFixtures.editorModel(tool: tool))
             }
         }
     }
