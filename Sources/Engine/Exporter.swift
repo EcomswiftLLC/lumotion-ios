@@ -207,6 +207,7 @@ final class Exporter {
 
     private static func writeMP4(project: Project, assets: SourceAssets, codec: VideoCodec, longEdge: Int, to url: URL, token: RenderToken, progress: ExportProgress?) throws {
         let engine = RenderEngine(project: project, assets: assets)
+        engine.observeMemoryWarnings(keepingVideoFrames: true)
         let quality = RenderQuality(longEdge: longEdge)
         let canvas = RenderEngine.canvasSize(for: project, longEdge: quality.longEdge)
         let w = canvas.width, h = canvas.height
@@ -350,6 +351,7 @@ final class Exporter {
         let frames = delays.count
         let totalCentiseconds = max(1, delays.reduce(0, +))
         let engine = RenderEngine(project: project, assets: assets)
+        engine.observeMemoryWarnings(keepingVideoFrames: true)
         let ratio = project.canvas.aspect.ratio(sourceAspect: project.source.aspect)
         let quality = RenderQuality(longEdge: ratio >= 1 ? width : height)
         let palette = GIFPalette(colors: options.paletteColors)
@@ -394,6 +396,7 @@ final class Exporter {
         let url = try outputURL(ext: format.fileExtension)
         return try await runBlocking { token in
             let engine = RenderEngine(project: project, assets: assets)
+            engine.observeMemoryWarnings(keepingVideoFrames: true)
             let edge = longEdge ?? max(project.source.pixelWidth, project.source.pixelHeight)
             guard let image = engine.renderFrame(time: time, quality: RenderQuality(longEdge: edge), token: token) else {
                 if token.isCancelled { throw EngineError.cancelled }
@@ -504,9 +507,9 @@ final class AudioFeeder {
         }
         let total = CMTimeGetSeconds(asset.duration)
         let available = total.isFinite && total > 0 ? total : duration
-        let start = min(max(spec.trimStart, 0), max(0, available - 0.05))
-        let end = min(max(spec.trimEnd ?? available, start + 0.05), available)
-        let segment = max(0.05, end - start)
+        let window = AudioFeeder.trimWindow(trimStart: spec.trimStart, trimEnd: spec.trimEnd, available: available)
+        let start = window.start
+        let segment = window.end - window.start
 
         let composition = AVMutableComposition()
         guard let track = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else {
@@ -559,6 +562,18 @@ final class AudioFeeder {
             AVEncoderBitRateKey: 128_000,
         ])
         input.expectsMediaDataInRealTime = false
+    }
+
+    /// The part of the audio file that plays, in seconds into the file. A trim that makes no sense means "play to the end"
+    /// instead of a tiny slice that would loop as a buzz: an end before (or within 0.05 s of) the start, or a start
+    /// at or past the end of the file. The window never reaches beyond the file, even for a file shorter than 0.05 s.
+    static func trimWindow(trimStart: Double, trimEnd: Double?, available: Double) -> (start: Double, end: Double) {
+        let length = available.isFinite ? max(available, 0.001) : 0.001
+        var start = trimStart.isFinite ? max(trimStart, 0) : 0
+        if start > length - 0.05 { start = 0 }
+        var end = length
+        if let requested = trimEnd, requested.isFinite, requested > start + 0.05 { end = min(requested, length) }
+        return (start, end)
     }
 
     /// Starts reading. False when the audio cannot be decoded.

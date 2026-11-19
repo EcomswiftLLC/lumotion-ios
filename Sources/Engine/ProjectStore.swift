@@ -33,6 +33,8 @@ final class ProjectStore {
     private let lock = NSLock()
     /// Projects deleted during this run: `save` refuses them, so a late autosave cannot bring a deleted project back.
     private var deleted = Set<UUID>()
+    /// Projects whose file on disk was already checked for data this build would lose (see `save`).
+    private var checkedOriginal = Set<UUID>()
     private var cleanedOrphans = false
 
     init(rootURL: URL) {
@@ -45,13 +47,51 @@ final class ProjectStore {
         let e = JSONEncoder()
         e.dateEncodingStrategy = .iso8601
         e.outputFormatting = [.sortedKeys]
+        // A NaN or infinity that slipped into a setting must not make every save fail: it is written as a word and read back.
+        e.nonConformingFloatEncodingStrategy = .convertToString(positiveInfinity: "inf", negativeInfinity: "-inf", nan: "nan")
         return e
     }
 
     private static func makeDecoder() -> JSONDecoder {
         let d = JSONDecoder()
         d.dateDecodingStrategy = .iso8601
+        d.nonConformingFloatDecodingStrategy = .convertFromString(positiveInfinity: "inf", negativeInfinity: "-inf", nan: "nan")
         return d
+    }
+
+    // MARK: Keeping what a newer build wrote
+
+    /// True when reading `data` as a project and writing it back would lose something: the file is from a newer schema,
+    /// or a key, an array element or a value was dropped or replaced by a default (an effect kind this build does not
+    /// know, an unreadable value). Keys that are merely missing do not count, they are filled with defaults and nothing
+    /// is lost.
+    static func loadingWouldLoseData(_ data: Data) -> Bool {
+        guard let object = try? JSONSerialization.jsonObject(with: data) else { return false }
+        guard let project = try? makeDecoder().decode(Project.self, from: data) else { return true }
+        if project.schemaVersion > Project.currentSchemaVersion { return true }
+        guard let encoded = try? makeEncoder().encode(project), let again = try? JSONSerialization.jsonObject(with: encoded) else { return false }
+        return !isCovered(object, by: again)
+    }
+
+    /// Every key, element and value of `old` is present, unchanged, in `new`.
+    private static func isCovered(_ old: Any, by new: Any) -> Bool {
+        if old is NSNull { return true }
+        if let o = old as? [String: Any] {
+            guard let n = new as? [String: Any] else { return false }
+            for (key, value) in o {
+                if value is NSNull { continue }
+                guard let other = n[key], isCovered(value, by: other) else { return false }
+            }
+            return true
+        }
+        if let o = old as? [Any] {
+            guard let n = new as? [Any], n.count == o.count else { return false }
+            for i in o.indices where !isCovered(o[i], by: n[i]) { return false }
+            return true
+        }
+        if let o = old as? NSNumber, let n = new as? NSNumber { return o.doubleValue == n.doubleValue }
+        if let o = old as? String, let n = new as? String { return o == n }
+        return false
     }
 
     // MARK: Locations
@@ -63,6 +103,7 @@ final class ProjectStore {
 
     private func jsonURL(_ id: UUID) -> URL { folderURL(for: id).appendingPathComponent("project.json") }
     private func backupURL(_ id: UUID) -> URL { folderURL(for: id).appendingPathComponent("project.json.bak") }
+    private func origURL(_ id: UUID) -> URL { folderURL(for: id).appendingPathComponent("project.json.orig") }
     private func metaURL(_ id: UUID) -> URL { folderURL(for: id).appendingPathComponent("meta.json") }
 
     /// Thumbnail location for a project (may not exist yet).
@@ -223,6 +264,15 @@ final class ProjectStore {
         let data = try ProjectStore.makeEncoder().encode(p)
         let main = jsonURL(p.id)
         if fm.fileExists(atPath: main.path) {
+            // The first time this run overwrites a file that holds something this build cannot keep (written by a newer
+            // build, or with values it had to replace), the untouched file is kept as project.json.orig. It is written
+            // once and never overwritten, because the .bak below is replaced on every save.
+            if checkedOriginal.insert(p.id).inserted {
+                let orig = origURL(p.id)
+                if !fm.fileExists(atPath: orig.path), let old = try? Data(contentsOf: main), ProjectStore.loadingWouldLoseData(old) {
+                    try? old.write(to: orig, options: .atomic)
+                }
+            }
             let backup = backupURL(p.id)
             try? fm.removeItem(at: backup)
             try? fm.copyItem(at: main, to: backup)
@@ -338,6 +388,7 @@ final class ProjectStore {
         let newID = UUID()
         try fm.copyItem(at: folderURL(for: id), to: folderURL(for: newID))
         try? fm.removeItem(at: backupURL(newID))
+        try? fm.removeItem(at: origURL(newID))
         project.id = newID
         project.title = project.title + " copy"
         project.createdAt = Date()

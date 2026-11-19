@@ -1,6 +1,7 @@
 import Foundation
 import CoreGraphics
 import QuartzCore
+import UIKit
 
 private struct Boxed<T> {
     var value: T?
@@ -41,6 +42,7 @@ final class RenderEngine {
     private var version = 0
     private let memo = Memo(budgetBytes: RenderEngine.memoBudgetBytes)
     private var localStore: (key: String, store: VideoFrameStore)?
+    private var memoryToken: NSObjectProtocol?
     private var adaptiveEdge = 720
     private var smoothedMs: Double = 0
 
@@ -105,12 +107,38 @@ final class RenderEngine {
     /// and masks, the text bitmaps, and the decoded cinemagraph frames (they are read again from the video when the next
     /// frame needs them). An export that is running keeps the frames it holds, so it finishes normally.
     func handleMemoryWarning() {
-        memo.removeAll()
-        LayerRenderer.clearCache()
+        dropRenderCaches()
         lock.lock()
         localStore = nil
         lock.unlock()
         VideoStoreCache.shared.clear()
+    }
+
+    /// Frees the rendered pictures, masks and text bitmaps, but not the decoded cinemagraph frames.
+    func dropRenderCaches() {
+        memo.removeAll()
+        LayerRenderer.clearCache()
+    }
+
+    /// Makes the engine react to system memory warnings by itself, so nobody has to forward them. With
+    /// `keepingVideoFrames` it only drops the render caches and keeps the decoded cinemagraph frames it is using (an
+    /// export that is running needs them to finish); without it, it does everything `handleMemoryWarning` does. The
+    /// observer is removed when the engine goes away. Calling it again replaces the earlier setting. The exporter's
+    /// engines use this.
+    func observeMemoryWarnings(keepingVideoFrames: Bool) {
+        let token = NotificationCenter.default.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: nil) { [weak self] _ in
+            guard let self else { return }
+            if keepingVideoFrames { self.dropRenderCaches() } else { self.handleMemoryWarning() }
+        }
+        lock.lock()
+        let old = memoryToken
+        memoryToken = token
+        lock.unlock()
+        if let old { NotificationCenter.default.removeObserver(old) }
+    }
+
+    deinit {
+        if let token = memoryToken { NotificationCenter.default.removeObserver(token) }
     }
 
     /// The longest canvas edge, in pixels, that an export can fill with real detail. Photos can go to 4096. For a

@@ -2,6 +2,7 @@ import XCTest
 import AVFoundation
 import ImageIO
 import CoreGraphics
+import UIKit
 @testable import Lumotion
 
 /// Forward-compatible project files, memory budgets, the shared cinemagraph frame store, export housekeeping, GIF timing,
@@ -574,6 +575,207 @@ final class EngineAuditTests: XCTestCase {
         project.cinemagraph.stabilize = false
         engine.update(project: project)
         XCTAssertNotNil(engine.renderFrame(time: 0.2, quality: RenderQuality(longEdge: 96)))
+    }
+}
+
+// MARK: - Second audit: audio trim, memory warnings in exports, project file safety
+
+extension EngineAuditTests {
+
+    func testAnInvertedOrTinyAudioTrimMeansPlayToTheEnd() {
+        // End before start, end a hair after start, start past the end of the file: all play to the end, never a short loop.
+        var w = AudioFeeder.trimWindow(trimStart: 3, trimEnd: 2, available: 10)
+        XCTAssertEqual(w.start, 3); XCTAssertEqual(w.end, 10, accuracy: 1e-9)
+        w = AudioFeeder.trimWindow(trimStart: 3, trimEnd: 3.02, available: 10)
+        XCTAssertEqual(w.start, 3); XCTAssertEqual(w.end, 10, accuracy: 1e-9)
+        w = AudioFeeder.trimWindow(trimStart: 3, trimEnd: 3, available: 10)
+        XCTAssertEqual(w.end, 10, accuracy: 1e-9)
+        w = AudioFeeder.trimWindow(trimStart: 12, trimEnd: nil, available: 10)
+        XCTAssertEqual(w.start, 0); XCTAssertEqual(w.end, 10, accuracy: 1e-9)
+        w = AudioFeeder.trimWindow(trimStart: 9.98, trimEnd: nil, available: 10)
+        XCTAssertEqual(w.start, 0); XCTAssertEqual(w.end, 10, accuracy: 1e-9)
+    }
+
+    func testAValidAudioTrimIsKeptAndNeverReachesPastTheFile() {
+        var w = AudioFeeder.trimWindow(trimStart: 1, trimEnd: 4, available: 10)
+        XCTAssertEqual(w.start, 1); XCTAssertEqual(w.end, 4, accuracy: 1e-9)
+        w = AudioFeeder.trimWindow(trimStart: 0, trimEnd: 25, available: 10)
+        XCTAssertEqual(w.end, 10, accuracy: 1e-9, "an end past the file is cut to the file")
+        w = AudioFeeder.trimWindow(trimStart: -3, trimEnd: nil, available: 10)
+        XCTAssertEqual(w.start, 0)
+        w = AudioFeeder.trimWindow(trimStart: .nan, trimEnd: .infinity, available: 10)
+        XCTAssertEqual(w.start, 0); XCTAssertEqual(w.end, 10, accuracy: 1e-9)
+    }
+
+    func testAudioShorterThanFiftyMillisecondsStaysInsideTheFile() {
+        for available in [0.02, 0.049, 0.05, 0.06] {
+            for (start, end) in [(0.0, nil), (0.01, 0.03), (0.5, 0.2)] as [(Double, Double?)] {
+                let w = AudioFeeder.trimWindow(trimStart: start, trimEnd: end, available: available)
+                XCTAssertGreaterThanOrEqual(w.start, 0)
+                XCTAssertLessThanOrEqual(w.end, available + 1e-9, "available \(available), start \(start)")
+                XCTAssertGreaterThan(w.end, w.start)
+            }
+        }
+    }
+
+    func testExportEnginesKeepTheirVideoFramesThroughAMemoryWarning() async throws {
+        let folder = Fixture.tempFolder(self)
+        let clip = folder.appendingPathComponent("clip.mp4")
+        try Fixture.writeTestVideo(to: clip)
+        var project = videoProject(size: CGSize(width: 128, height: 96), duration: 2)
+        project.loop.duration = project.cinemagraph.loopLength
+        let engine = RenderEngine(project: project, assets: SourceAssets(videoURL: clip))
+        engine.observeMemoryWarnings(keepingVideoFrames: true)
+        VideoStoreCache.shared.clear()
+        XCTAssertNotNil(engine.renderFrame(time: 0.3, quality: RenderQuality(longEdge: 96)))
+        let held = VideoStoreCache.shared.heldBytes
+        XCTAssertGreaterThan(held, 0)
+        NotificationCenter.default.post(name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
+        XCTAssertEqual(VideoStoreCache.shared.heldBytes, held, "the store the export is reading from stays")
+        XCTAssertNotNil(engine.renderFrame(time: 0.6, quality: RenderQuality(longEdge: 96)))
+
+        // An engine that is not holding frames in use lets them go.
+        let preview = RenderEngine(project: project, assets: SourceAssets(videoURL: clip))
+        preview.observeMemoryWarnings(keepingVideoFrames: false)
+        NotificationCenter.default.post(name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
+        XCTAssertEqual(VideoStoreCache.shared.heldBytes, 0)
+    }
+
+    func testExportEnginesDropTheirRenderMemoAtAMemoryWarning() {
+        let engine = Fixture.engine(typewriterProject())
+        engine.observeMemoryWarnings(keepingVideoFrames: true)
+        _ = Fixture.render(engine, time: 1.9)
+        XCTAssertGreaterThan(LayerRenderer.cachedBytes, 0)
+        NotificationCenter.default.post(name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
+        XCTAssertEqual(LayerRenderer.cachedBytes, 0)
+        XCTAssertNotNil(engine.renderFrame(time: 1.9, quality: RenderQuality(longEdge: 96)), "rendering carries on")
+    }
+
+    func testEnginesStopListeningWhenTheyGoAway() {
+        weak var weakEngine: RenderEngine?
+        autoreleasepool {
+            let engine = Fixture.engine(typewriterProject())
+            engine.observeMemoryWarnings(keepingVideoFrames: true)
+            weakEngine = engine
+        }
+        XCTAssertNil(weakEngine, "the observer must not keep the engine alive")
+    }
+
+    // MARK: Project files
+
+    private func makeSecondStore() -> ProjectStore {
+        ProjectStore(rootURL: Fixture.tempFolder(self).appendingPathComponent("Projects", isDirectory: true))
+    }
+
+    private func rewriteProjectFile(_ store: ProjectStore, _ id: UUID, _ change: (inout [String: Any]) -> Void) throws {
+        let url = store.fileURL("project.json", in: id)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        change(&object)
+        try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]).write(to: url)
+    }
+
+    private func origExists(_ store: ProjectStore, _ id: UUID) -> Bool {
+        FileManager.default.fileExists(atPath: store.fileURL("project.json.orig", in: id).path)
+    }
+
+    func testANaNInAProjectDoesNotMakeEverySaveFail() throws {
+        let store = makeSecondStore()
+        var project = try store.createPhotoProject(image: Fixture.photo(width: 80, height: 60), originalData: nil, title: "Nan").project
+        project.canvas.zoom = .nan
+        project.canvas.centerX = .infinity
+        XCTAssertThrowsError(try JSONEncoder().encode(project), "a plain encoder refuses these numbers")
+        XCTAssertNoThrow(try store.save(project))
+        project.title = "Still saving"
+        XCTAssertNoThrow(try store.save(project))
+        let loaded = try store.load(id: project.id)
+        XCTAssertEqual(loaded.title, "Still saving")
+        XCTAssertEqual(loaded.source.pixelWidth, 80)
+    }
+
+    func testANormalProjectGetsNoOriginalCopy() throws {
+        let store = makeSecondStore()
+        var project = try store.createPhotoProject(image: Fixture.photo(width: 80, height: 60), originalData: nil, title: "Plain").project
+        let fresh = ProjectStore(rootURL: store.rootURL)
+        project.title = "Edited"
+        try fresh.save(project)
+        try fresh.save(project)
+        XCTAssertFalse(origExists(store, project.id))
+        // A file that only lacks keys (an older build) loses nothing either.
+        try rewriteProjectFile(store, project.id) { $0.removeValue(forKey: "look"); $0.removeValue(forKey: "cinemagraph") }
+        let older = ProjectStore(rootURL: store.rootURL)
+        try older.save(try older.load(id: project.id))
+        XCTAssertFalse(origExists(store, project.id))
+    }
+
+    func testAFileFromANewerBuildIsKeptOnceAndNeverOverwritten() throws {
+        let store = makeSecondStore()
+        let project = try store.createPhotoProject(image: Fixture.photo(width: 80, height: 60), originalData: nil, title: "Future").project
+        try rewriteProjectFile(store, project.id) { $0["schemaVersion"] = Project.currentSchemaVersion + 4; $0["holo"] = ["a": 1] }
+        let original = try Data(contentsOf: store.fileURL("project.json", in: project.id))
+
+        let run = ProjectStore(rootURL: store.rootURL)
+        var opened = try run.load(id: project.id)
+        XCTAssertEqual(opened.title, "Future")
+        opened.title = "Edited by an older build"
+        try run.save(opened)
+        let orig = store.fileURL("project.json.orig", in: project.id)
+        XCTAssertEqual(try Data(contentsOf: orig), original, "the untouched file is kept")
+        XCTAssertNotEqual(try Data(contentsOf: store.fileURL("project.json", in: project.id)), original)
+
+        // More saves, in this run and in the next one: the copy stays exactly as it was.
+        opened.title = "Edited again"
+        try run.save(opened)
+        let nextRun = ProjectStore(rootURL: store.rootURL)
+        try nextRun.save(try nextRun.load(id: project.id))
+        XCTAssertEqual(try Data(contentsOf: orig), original)
+    }
+
+    func testDroppedOrReplacedValuesKeepAnOriginalCopy() throws {
+        let store = makeSecondStore()
+        var project = try store.createPhotoProject(image: Fixture.photo(width: 80, height: 60), originalData: nil, title: "Dropped").project
+        project.livingEffects = [LivingEffect(kind: .ripple, strength: 0.8, speed: 1)]
+        try store.save(project)
+        try rewriteProjectFile(store, project.id) { object in
+            var effects = (object["livingEffects"] as? [[String: Any]]) ?? []
+            effects.append(["kind": "hologramFromTheFuture", "strength": 0.9])
+            object["livingEffects"] = effects
+        }
+        let original = try Data(contentsOf: store.fileURL("project.json", in: project.id))
+        let run = ProjectStore(rootURL: store.rootURL)
+        let opened = try run.load(id: project.id)
+        XCTAssertEqual(opened.livingEffects.count, 1, "the unknown effect is dropped on load")
+        try run.save(opened)
+        XCTAssertEqual(try Data(contentsOf: store.fileURL("project.json.orig", in: project.id)), original)
+        XCTAssertTrue(ProjectStore.loadingWouldLoseData(original))
+    }
+
+    func testLoadingWouldLoseDataOnlyWhenSomethingIsReallyLost() throws {
+        let project = richProject()
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let clean = try encoder.encode(project)
+        XCTAssertFalse(ProjectStore.loadingWouldLoseData(clean))
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: clean) as? [String: Any])
+        object.removeValue(forKey: "texts")
+        XCTAssertFalse(ProjectStore.loadingWouldLoseData(try JSONSerialization.data(withJSONObject: object)), "missing keys take defaults, nothing is lost")
+        object["unknownKeyFromTheFuture"] = 1
+        XCTAssertTrue(ProjectStore.loadingWouldLoseData(try JSONSerialization.data(withJSONObject: object)))
+        XCTAssertFalse(ProjectStore.loadingWouldLoseData(Data("not json".utf8)), "an unreadable file is not a newer file")
+    }
+
+    func testDuplicatingAProjectStartsItsOwnOriginalCopy() throws {
+        let store = makeSecondStore()
+        let project = try store.createPhotoProject(image: Fixture.photo(width: 80, height: 60), originalData: nil, title: "Src").project
+        try rewriteProjectFile(store, project.id) { $0["schemaVersion"] = Project.currentSchemaVersion + 1 }
+        let run = ProjectStore(rootURL: store.rootURL)
+        try run.save(try run.load(id: project.id))
+        XCTAssertTrue(origExists(store, project.id))
+        let sourceOrig = try Data(contentsOf: store.fileURL("project.json.orig", in: project.id))
+        let sourceNow = try Data(contentsOf: store.fileURL("project.json", in: project.id))
+        let copy = try run.duplicate(id: project.id)
+        let copied = try Data(contentsOf: store.fileURL("project.json.orig", in: copy.id))
+        XCTAssertEqual(copied, sourceNow, "the copy keeps the file it was copied from")
+        XCTAssertNotEqual(copied, sourceOrig)
     }
 }
 

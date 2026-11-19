@@ -195,7 +195,10 @@ struct LoopSpec: Codable, Hashable {
 /// Everything that describes one animation. A plain value: copy it, change it, hand it back to the engine.
 /// The engine turns a `Project` plus `SourceAssets` into frames, and the same value is saved to disk by `ProjectStore`.
 struct Project: Codable, Hashable, Identifiable {
-    var schemaVersion: Int = 1
+    /// The newest file layout this build understands. A file with a higher `schemaVersion` still opens, but the store
+    /// keeps an untouched copy of it (`project.json.orig`) before saving over it.
+    static let currentSchemaVersion = 1
+    var schemaVersion: Int = Project.currentSchemaVersion
     var id: UUID
     var title: String
     var createdAt: Date
