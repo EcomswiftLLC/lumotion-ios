@@ -117,6 +117,25 @@ final class InterfaceTests: XCTestCase {
         XCTAssertNotNil(model.exportWarning(for: choice))
     }
 
+    @MainActor
+    func testCappedGIFShowsTheEngineWarningAndResolutionsComeFromTheEngine() {
+        var project = Project.new(title: "Test", kind: .still, fileName: "source.jpg", pixelWidth: 1920, pixelHeight: 1080)
+        project.loop.duration = 15
+        let model = EditorModel(project: project, assets: SourceAssets(), store: ProjectStore(rootURL: FileManager.default.temporaryDirectory.appendingPathComponent("LumotionTestStore-\(UUID().uuidString)", isDirectory: true)))
+        var choice = ExportChoice()
+        choice.format = .gif
+        choice.gif = GIFOptions(width: 1080, fps: 30)
+        let warning = model.exportWarning(for: choice)
+        XCTAssertNotNil(warning)
+        XCTAssertTrue(warning?.contains("fewer frames") == true)
+        choice.gif = GIFOptions(width: 320, fps: 10)
+        XCTAssertNil(model.exportWarning(for: choice))
+
+        let coordinator = ExportCoordinator()
+        coordinator.resolutions = { [weak model] codec in model?.availableResolutions(codec: codec) ?? [] }
+        XCTAssertEqual(coordinator.offeredResolutions(for: .h264), model.availableResolutions(codec: .h264))
+    }
+
     func testRewardedPolicyGrace() {
         var policy = RewardedPolicy()
         XCTAssertTrue(policy.shouldOffer(adReady: true))

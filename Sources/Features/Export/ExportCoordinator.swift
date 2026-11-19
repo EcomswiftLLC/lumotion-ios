@@ -95,7 +95,9 @@ final class ExportCoordinator: ObservableObject {
     var estimate: ((ExportChoice) -> String?)?
     /// A heads-up for exports that take long, or nil.
     var warning: ((ExportChoice) -> String?)?
-    /// Longest side of the project in pixels, so resolutions larger than the source are not offered.
+    /// The video sizes the engine offers for this project and codec (`Exporter.availableResolutions`).
+    var resolutions: ((VideoCodec) -> [ExportResolution])?
+    /// Longest side of the project in pixels, used for sizes only when `resolutions` is not set.
     var sourceLongSide: Int = 4096
     var supportsHEVC: Bool = {
         AVAssetExportSession.allExportPresets().contains(AVAssetExportPresetHEVCHighestQuality)
@@ -119,6 +121,8 @@ final class ExportCoordinator: ObservableObject {
 
     /// Resolutions the device can encode with the codec and that the project is large enough to fill.
     func offeredResolutions(for codec: VideoCodec) -> [ExportResolution] {
+        // The engine knows what the project's pictures can fill (small clips are limited), so it decides when it can.
+        if let resolutions { return resolutions(codec) }
         let supported = Exporter.supportedResolutions(codec: codec)
         let fitting = supported.filter { $0.longEdge <= max(1280, sourceLongSide) }
         return fitting.isEmpty ? supported : fitting
@@ -201,7 +205,8 @@ final class ExportCoordinator: ObservableObject {
             await self.run(action, generation: id)
             self.endProtection()
             self.winding = false
-            Exporter.clearOldExports()
+            // Older exports go; the file that is cached, being shared or being saved to Files stays.
+            Exporter.clearOldExports(keeping: [self.cached?.item.url, self.shareURL, self.filesURL].compactMap { $0 })
         }
     }
 

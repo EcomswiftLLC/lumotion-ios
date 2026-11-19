@@ -102,9 +102,14 @@ final class EditorModel: ObservableObject {
         self.project = project
         self.assets = assets
         self.store = store
-        self.engine = RenderEngine(project: project, assets: assets)
+        let engine = RenderEngine(project: project, assets: assets)
+        self.engine = engine
+        self.memoryObserver = MemoryWarningObserver(engine: engine)
         self.isPlaying = !UIAccessibility.isReduceMotionEnabled
     }
+
+    /// Drops the engine's caches when iOS reports low memory. Released together with the model.
+    private let memoryObserver: MemoryWarningObserver
 
     // MARK: Derived
 
@@ -396,8 +401,15 @@ final class EditorModel: ObservableObject {
         case .still:
             break
         }
-        guard !reasons.isEmpty else { return nil }
-        return "This export is large (\(reasons.joined(separator: ", "))). It can take several minutes. Keep Lumotion open and the screen on until it finishes."
+        let capped = cappedGIFWarning(for: choice)
+        guard !reasons.isEmpty else { return capped }
+        let slow = "This export is large (\(reasons.joined(separator: ", "))). It can take several minutes. Keep Lumotion open and the screen on until it finishes."
+        return capped.map { $0 + " " + slow } ?? slow
+    }
+
+    /// The video sizes the engine says this project can honestly fill, for the codec chosen.
+    func availableResolutions(codec: VideoCodec) -> [ExportResolution] {
+        Exporter(project: project, assets: assets).availableResolutions(codec: codec)
     }
 
     func exportEstimate(for choice: ExportChoice) -> String? {
@@ -413,8 +425,31 @@ final class EditorModel: ObservableObject {
         if estimate.width > 0 { text += ", \(estimate.width) by \(estimate.height) pixels" }
         if estimate.frameCount > 0 { text += ", \(estimate.frameCount) frames" }
         text += "."
-        if let note = estimate.note { text += " " + note }
         return text
+    }
+
+    /// Set when a GIF has to use fewer frames per second than asked for, so the size stays within memory.
+    private func cappedGIFWarning(for choice: ExportChoice) -> String? {
+        guard choice.format == .gif else { return nil }
+        let estimate = Exporter(project: project, assets: assets).estimateGIF(options: choice.gif.clamped)
+        return estimate.isCapped ? estimate.warning : nil
+    }
+}
+
+/// Tells one engine to free its caches whenever the system sends a memory warning.
+private final class MemoryWarningObserver {
+    private var token: NSObjectProtocol?
+
+    init(engine: RenderEngine) {
+        token = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main
+        ) { [weak engine] _ in
+            engine?.handleMemoryWarning()
+        }
+    }
+
+    deinit {
+        if let token { NotificationCenter.default.removeObserver(token) }
     }
 }
 

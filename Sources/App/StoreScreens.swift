@@ -182,6 +182,7 @@ private struct StoreExportScreen: View {
             if let model {
                 preview = model.engine.renderFrame(time: 1.2, quality: RenderQuality(longEdge: 1400)).map { UIImage(cgImage: $0) }
                 coordinator.estimate = { [weak model] choice in model?.exportEstimate(for: choice) }
+                coordinator.resolutions = { [weak model] codec in model?.availableResolutions(codec: codec) ?? [.p720] }
                 coordinator.warning = { [weak model] choice in model?.exportWarning(for: choice) }
                 coordinator.sourceLongSide = max(model.project.source.pixelWidth, model.project.source.pixelHeight)
             } else {

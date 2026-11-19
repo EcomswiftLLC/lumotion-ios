@@ -133,6 +133,7 @@ struct EditorContent: View {
             model.startPreview()
             exporter.renderer = model.makeExportRenderer()
             exporter.estimate = { [weak model] choice in model?.exportEstimate(for: choice) }
+            exporter.resolutions = { [weak model] codec in model?.availableResolutions(codec: codec) ?? [.p720] }
             exporter.warning = { [weak model] choice in model?.exportWarning(for: choice) }
             exporter.sourceLongSide = max(model.project.source.pixelWidth, model.project.source.pixelHeight)
             model.onChange = { [weak exporter] in exporter?.invalidateCache() }
