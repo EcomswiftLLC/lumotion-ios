@@ -118,8 +118,8 @@ struct LivingKernel {
             let sp = max(0, sin(theta + twoPi * n))
             let sp2 = sp * sp
             let sp4 = sp2 * sp2
-            let sp12 = sp4 * sp4 * sp4
-            o.add = 70 * strength * sp12
+            let sp16 = sp4 * sp4 * sp4 * sp4
+            o.add = 55 * strength * sp16
             o.lumaAdd = true
         case .pulse:
             let z = 1 + 0.03 * strength * sin(theta)
@@ -151,7 +151,7 @@ struct LivingKernel {
             let rx = x - cxp, ry = y - cyp
             let r = (rx * rx + ry * ry).squareRoot() / s
             let sigma = 0.22 * scale
-            let a = 0.7 * strength * sin(theta) * exp(-(r * r) / (sigma * sigma))
+            let a = 0.18 * strength * sin(theta) * exp(-(r * r) / (sigma * sigma))
             let c = cos(a), sn = sin(a)
             o.ox = (c - 1) * rx - sn * ry
             o.oy = sn * rx + (c - 1) * ry

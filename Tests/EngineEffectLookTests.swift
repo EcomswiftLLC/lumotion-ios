@@ -67,7 +67,7 @@ final class EngineEffectLookTests: XCTestCase {
                 XCTAssertLessThanOrEqual(wobble.maxDisplacement, 0.04 * s * Float(strength), "wobble \(strength) \(phase)")
                 XCTAssertLessThanOrEqual(wobble.foldShare, 0.002)
                 let swirl = LivingFX.stats(effect(.swirl, strength: strength), width: w, height: h, phase: phase, cycles: 1, step: 2)
-                XCTAssertLessThanOrEqual(swirl.maxDisplacement, 0.12 * s * Float(strength) + 0.5, "swirl \(strength) \(phase)")
+                XCTAssertLessThanOrEqual(swirl.maxDisplacement, 0.025 * s * Float(strength) + 0.5, "swirl \(strength) \(phase)")
                 XCTAssertLessThanOrEqual(swirl.foldShare, 0.002, "swirl \(strength) \(phase)")
             }
         }
@@ -79,7 +79,7 @@ final class EngineEffectLookTests: XCTestCase {
             for phase in phases {
                 let st = LivingFX.stats(effect(.shimmer, strength: strength), width: w, height: h, phase: phase, cycles: 1, step: 1)
                 XCTAssertLessThanOrEqual(st.maxDisplacement, 0.0001, "shimmer must not move pixels")
-                XCTAssertLessThanOrEqual(st.maxAdd, 71 * Float(strength) + 0.01, "glints too bright: \(strength) \(phase)")
+                XCTAssertLessThanOrEqual(st.maxAdd, 56 * Float(strength) + 0.01, "glints too bright: \(strength) \(phase)")
                 XCTAssertLessThanOrEqual(st.meanAdd, 14 * Float(strength), "too much light added: \(strength) \(phase)")
                 XCTAssertLessThanOrEqual(st.brightShare, 0.2, "too many bright pixels: \(strength) \(phase)")
             }
