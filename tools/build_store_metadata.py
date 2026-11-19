@@ -126,7 +126,7 @@ Honest wording: no star or review claims, no competitor names, no "AI", no claim
 {t['description']}
 ```
 
-Facts behind the wording (re-verify against `docs/STATUS.md` and the shipped build before every submission, and edit the copy if a feature was cut): 20 overlays (spec list), more than 20 looks, loops of 1 to 15 seconds, 24/30/60 fps, loop up to 6 seconds for cinemagraphs, MP4 H.264 or HEVC, GIF, still image, no watermark, rewarded ad covers 2 minutes, no music bundled, Vision used on device for the subject.
+Facts behind the wording (re-verify against `docs/STATUS.md` and the shipped build before every submission, and edit the copy if a feature was cut): verified in code 2026-11-18: 20 overlays (`OverlayKind`), 24 looks plus Original (`ProjectLook`), 18 presets (`Sources/Engine/Presets.swift`), 11 living effects (`LivingEffectKind`), loops 1 to 15 s (`LoopSpec.durationRange`), fps 24/30/60 (`allowedFPS`), cinemagraph segment up to 6 s (`maxSegment`), MP4 H.264/HEVC, 2K needs 3.5 GB and 4K 5.5 GB of memory (`Exporter.supportedResolutions`), GIF and still image (JPG/PNG/HEIC), six aspect ratios, no music bundled. Rewarded ad covers 2 minutes (`RewardedGate`).
 
 ## What's New, version 1.0 ({n('whats-new')})
 

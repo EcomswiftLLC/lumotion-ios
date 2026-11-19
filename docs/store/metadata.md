@@ -10,7 +10,7 @@ Naming rule (owner, always): search keywords first, brand last, one colon. The c
 | Home screen name | Lumotion | short on purpose, long names truncate |
 | Promotional text | see below | 107 of 170 |
 | Keywords | cinemograph,loop,live,gif,parallax,motion,living,video,animate,flow,rain,snow,overlay,3d,depth,wind | 99 of 100 |
-| Description | see below | 3221 of 4000 |
+| Description | see below | 3293 of 4000 |
 | What's New (1.0) | see below | 196 of 4000 |
 | Primary category | Photo & Video | |
 | Secondary category | Graphics & Design | |
@@ -36,7 +36,7 @@ Combinations such as "photo to video" or "living photo" are formed by Apple from
 Paint the flow, add depth and rain, export a seamless loop. Free, private and made on your iPhone and iPad.
 ```
 
-## Description (3221 of 4000)
+## Description (3293 of 4000)
 
 Honest wording: no star or review claims, no competitor names, no "AI", no claim a test cannot prove, and the ad model stated plainly.
 
@@ -58,19 +58,19 @@ DEPTH AND CAMERA
 - Camera moves: zoom in or out, pan, drift, rotate, handheld shake and breathe, with the easing you choose
 
 LIVING EFFECTS AND OVERLAYS
-- Whole-photo effects: water ripple, waves, wind sway, heat haze, shimmer, pulse, light sweep, glitch and more, over the whole picture or only where you paint
+- 11 whole-photo effects: water ripple, waves, wind sway, heat haze, shimmer, pulse, light sweep, glitch, wobble, wiggle and ink swirl, over the whole picture or only where you paint
 - 20 overlays: rain, heavy rain, snow, blizzard, falling leaves, petals, fireflies, sparkles, bokeh, dust, embers, smoke and fog, lens flare, light leaks, twinkling stars, confetti, hearts, bubbles, shooting stars and fireworks. Stack as many as you like and set the intensity, speed, size and tint of each
 
 MAGIC PRESETS
-- One tap sets up a starting point, such as Waterfall, Clouds drift, Rainy window, Neon rain or Parallax portrait. They are starting points, so you can change everything afterwards
+- 18 one-tap starting points, such as Waterfall, Clouds drift, Rainy window, Neon rain or Parallax portrait. They are starting points, so you can change everything afterwards
 
 LOOKS, TEXT AND SOUND
-- More than 20 looks, adjustment dials and animated film grain
+- 24 looks, adjustment dials and animated film grain
 - Text and emoji stickers with entrance and exit animations
 - Add an audio file of your own, with trim, volume and fade. Lumotion does not include music
 
 EXPORT YOUR WAY
-- MP4 video (H.264 or HEVC), GIF, or a still image
+- MP4 video (H.264 or HEVC) at 720p and 1080p, plus 2K and 4K on devices with enough memory, GIF, or a still image
 - Original, square, 4:5, 9:16, 16:9 and 3:4 shapes, loops from 1 to 15 seconds, 24, 30 or 60 frames per second
 - Save to Photos, share, or open in Files. No watermark
 - Projects save as you work, so you can come back to them any time
@@ -84,7 +84,7 @@ Lumotion is free. Ads from Google AdMob pay for it: a banner on the Home screen 
 Questions or ideas? Write to support@ecomswiftllc.com.
 ```
 
-Facts behind the wording (re-verify against `docs/STATUS.md` and the shipped build before every submission, and edit the copy if a feature was cut): 20 overlays (spec list), more than 20 looks, loops of 1 to 15 seconds, 24/30/60 fps, loop up to 6 seconds for cinemagraphs, MP4 H.264 or HEVC, GIF, still image, no watermark, rewarded ad covers 2 minutes, no music bundled, Vision used on device for the subject.
+Facts behind the wording (re-verify against `docs/STATUS.md` and the shipped build before every submission, and edit the copy if a feature was cut): verified in code 2026-11-18: 20 overlays (`OverlayKind`), 24 looks plus Original (`ProjectLook`), 18 presets (`Sources/Engine/Presets.swift`), 11 living effects (`LivingEffectKind`), loops 1 to 15 s (`LoopSpec.durationRange`), fps 24/30/60 (`allowedFPS`), cinemagraph segment up to 6 s (`maxSegment`), MP4 H.264/HEVC, 2K needs 3.5 GB and 4K 5.5 GB of memory (`Exporter.supportedResolutions`), GIF and still image (JPG/PNG/HEIC), six aspect ratios, no music bundled. Rewarded ad covers 2 minutes (`RewardedGate`).
 
 ## What's New, version 1.0 (196 of 4000)
 

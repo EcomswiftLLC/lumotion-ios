@@ -15,19 +15,19 @@ DEPTH AND CAMERA
 - Camera moves: zoom in or out, pan, drift, rotate, handheld shake and breathe, with the easing you choose
 
 LIVING EFFECTS AND OVERLAYS
-- Whole-photo effects: water ripple, waves, wind sway, heat haze, shimmer, pulse, light sweep, glitch and more, over the whole picture or only where you paint
+- 11 whole-photo effects: water ripple, waves, wind sway, heat haze, shimmer, pulse, light sweep, glitch, wobble, wiggle and ink swirl, over the whole picture or only where you paint
 - 20 overlays: rain, heavy rain, snow, blizzard, falling leaves, petals, fireflies, sparkles, bokeh, dust, embers, smoke and fog, lens flare, light leaks, twinkling stars, confetti, hearts, bubbles, shooting stars and fireworks. Stack as many as you like and set the intensity, speed, size and tint of each
 
 MAGIC PRESETS
-- One tap sets up a starting point, such as Waterfall, Clouds drift, Rainy window, Neon rain or Parallax portrait. They are starting points, so you can change everything afterwards
+- 18 one-tap starting points, such as Waterfall, Clouds drift, Rainy window, Neon rain or Parallax portrait. They are starting points, so you can change everything afterwards
 
 LOOKS, TEXT AND SOUND
-- More than 20 looks, adjustment dials and animated film grain
+- 24 looks, adjustment dials and animated film grain
 - Text and emoji stickers with entrance and exit animations
 - Add an audio file of your own, with trim, volume and fade. Lumotion does not include music
 
 EXPORT YOUR WAY
-- MP4 video (H.264 or HEVC), GIF, or a still image
+- MP4 video (H.264 or HEVC) at 720p and 1080p, plus 2K and 4K on devices with enough memory, GIF, or a still image
 - Original, square, 4:5, 9:16, 16:9 and 3:4 shapes, loops from 1 to 15 seconds, 24, 30 or 60 frames per second
 - Save to Photos, share, or open in Files. No watermark
 - Projects save as you work, so you can come back to them any time

@@ -227,7 +227,7 @@ REEL = [
     ("waterfall", "Forest Waterfall", "Water falls and the pool flows.", "A tall waterfall in green forest"),
     ("ocean-waves", "Ocean Waves", "Waves and foam roll against the rocks.", "Waves breaking on dark rocks"),
     ("city-rain-night", "Rainy Night", "Rain falls over a glowing street.", "A wet city street at night with red and gold lights"),
-    ("portrait-hair", "Windswept Portrait", "Hair drifts while depth moves the scene.", "A woman with long brown hair against a bright sky"),
+    ("forest-mist", "Misty Forest", "Mist drifts through the rays of light.", "Sun rays through a foggy pine forest"),
     ("sunset-lake", "Sunset Lake", "Reflections ripple under a golden sky.", "Trees reflected in a lake at sunset"),
     ("snowy-trees", "Snowy Pines", "Snow falls through a quiet forest.", "Snow-covered pine trees in a field"),
 ]
@@ -253,15 +253,25 @@ def reel_html():
 """
 
 
+SHOT_ALTS = [
+    "Lumotion on iPhone: the Flow tool with a painted waterfall region and direction arrows",
+    "Lumotion on iPhone: the Video tool with a loop segment for a cinemagraph",
+    "Lumotion on iPhone: the Depth tool with 3D depth motion on a mountain photo",
+    "Lumotion on iPhone: the Overlays tool with rain on a night street",
+    "Lumotion on iPhone: the Presets tool showing a grid of starting points",
+    "Lumotion on iPhone: the Effects tool over a sunset lake photo",
+]
+
+
 def shots_html():
     shots = sorted((SRC_SITE / "assets" / "shots").glob("*.jpg")) if (SRC_SITE / "assets" / "shots").exists() else []
     if not shots:
         return ""
-    items = "\n".join(f'        <li><img src="assets/shots/{p.name}" alt="Lumotion on iPhone, screen {i}" width="660" loading="lazy" decoding="async"></li>'
+    items = "\n".join(f'        <li><img src="assets/shots/{p.name}" alt="{html.escape(SHOT_ALTS[i - 1] if i <= len(SHOT_ALTS) else 'Lumotion on iPhone')}" width="660" loading="lazy" decoding="async"></li>'
                       for i, p in enumerate(shots, 1))
     return f"""  <section class="reel-section" aria-labelledby="h-shots">
     <div class="wrap">
-      <div class="reel-head"><h2 id="h-shots">The app, as it looks today</h2></div>
+      <div class="reel-head"><h2 id="h-shots">See it in the app</h2></div>
       <ul class="shots">
 {items}
       </ul>
@@ -306,10 +316,10 @@ def build_index():
           <div><dt>Cinemagraph from video</dt><dd>Choose a clip, choose a loop of up to six seconds, choose the still frame, and paint the part that keeps moving. The loop is smoothed at the ends, or plays back and forth.</dd></div>
           <div><dt>3D parallax and depth zoom</dt><dd>Separate a subject from its background and move the camera between them. Depth can come from the subject Lumotion finds on your device, from depth saved in a portrait photo, or from a brush you paint yourself. Revealed edges are filled so there are no holes.</dd></div>
           <div><dt>Camera motion</dt><dd>Zoom in or out, pan, drift, rotate, add a handheld shake, or let the frame breathe, with easing you can choose.</dd></div>
-          <div><dt>Living effects for the whole photo</dt><dd>Water ripple, waves, wind sway, heat haze, shimmer, pulse, light sweep, glitch and more, over the whole picture or just the part you choose.</dd></div>
+          <div><dt>Living effects for the whole photo</dt><dd>Eleven effects: water ripple, waves, wind sway, heat haze, shimmer, pulse, light sweep, glitch, wobble, wiggle and ink swirl, over the whole picture or just the part you choose.</dd></div>
           <div><dt>Overlays</dt><dd>{overlays} Stack several, and set the intensity, speed, size and tint of each.</dd></div>
-          <div><dt>Looks, text and stickers</dt><dd>Filters, adjustment dials and animated film grain, plus text and emoji stickers with entrance and exit animations.</dd></div>
-          <div><dt>Magic presets</dt><dd>One tap sets up a starting point such as Waterfall, Clouds drift, Rainy window or Parallax portrait. They are starting points, so you can change everything afterwards.</dd></div>
+          <div><dt>Looks, text and stickers</dt><dd>24 looks, adjustment dials and animated film grain, plus text and emoji stickers with entrance and exit animations.</dd></div>
+          <div><dt>Magic presets</dt><dd>18 one-tap starting points, such as Waterfall, Clouds drift, Rainy window or Parallax portrait. They are starting points, so you can change everything afterwards.</dd></div>
           <div><dt>Undo and redo, for everything</dt><dd>Compare with the original, step back through your edits, and reorder or remove layers. Your project is saved as you go.</dd></div>
         </dl>
       </div>
@@ -322,7 +332,7 @@ def build_index():
       <div class="section-body">
         <p>Pick the shape first: the original, square, 4:5, 9:16, 16:9 or 3:4, and reframe with a gesture. Choose a loop length from 1 to 15 seconds and a frame rate, then export.</p>
         <ul class="checks">
-          <li>MP4 video, in H.264 or HEVC</li>
+          <li>MP4 video, in H.264 or HEVC, at 720p and 1080p, plus 2K and 4K on devices with enough memory</li>
           <li>GIF, with a size estimate before you export</li>
           <li>A still frame as an image</li>
           <li>Save to Photos, share, or open in Files</li>

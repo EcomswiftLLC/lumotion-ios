@@ -22,7 +22,7 @@ SAMPLES = ROOT / "Sources" / "Resources" / "Samples"
 OUT.mkdir(parents=True, exist_ok=True)
 (OUT / "photos").mkdir(exist_ok=True)
 
-SITE_PHOTOS = ["waterfall", "ocean-waves", "city-rain-night", "portrait-hair", "sunset-lake", "snowy-trees"]
+SITE_PHOTOS = ["waterfall", "ocean-waves", "city-rain-night", "forest-mist", "sunset-lake", "snowy-trees"]
 
 
 def frame_svg(size=100):

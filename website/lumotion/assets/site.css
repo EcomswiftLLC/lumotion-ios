@@ -91,7 +91,7 @@ p { margin: 0 0 1rem; }
 .reel-note { margin-top: 1rem; }
 
 /* app screenshots, shown only when real captures exist */
-.shots { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(13rem, 16rem); gap: 1.25rem; overflow-x: auto; padding: .25rem .25rem 1.25rem; margin: 0; list-style: none; scroll-snap-type: x proximity; }
+.shots { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(13rem, 16rem); gap: 1.25rem; overflow-x: auto; padding: .25rem .25rem 1.25rem; margin: 0; list-style: none; scroll-snap-type: x proximity; scrollbar-color: var(--hairline) transparent; scrollbar-width: thin; }
 .shots li { scroll-snap-align: start; }
 .shots img { width: 100%; height: auto; border-radius: 1.4rem; border: 1px solid var(--hairline); }
 

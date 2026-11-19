@@ -21,22 +21,22 @@ ICON = ROOT / "Sources/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024
 INK = (10, 12, 19)
 NAVY = (22, 26, 44)
 PAPER = (237, 234, 227)
-MIST = (170, 172, 180)
+MIST = (200, 202, 209)
 GLOW = (242, 196, 141)
 VIOLET = (126, 132, 232)
 
 # (capture name, headline lines, supporting line). Copy is limited to what the app does (docs/PRODUCT-SPEC.md).
 SLIDES = [
-    ("home-filled", ["Make a still", "photo move."], "Free. No account. Made on your device."),
     ("editor-flow", ["Paint the flow,", "draw the way."], "Brush an area, draw arrows, set the speed."),
     ("editor-video", ["Cinemagraphs", "from your video."], "Choose a loop, freeze a frame, paint the motion."),
     ("editor-depth", ["Depth that moves", "with the camera."], "3D parallax between subject and background."),
-    ("editor-camera", ["Move the camera", "through the photo."], "Zoom, pan, drift, rotate and handheld shake."),
-    ("editor-effects", ["Bring the whole", "picture to life."], "Ripples, waves, wind sway, heat haze, shimmer."),
     ("editor-overlays", ["Twenty overlays,", "rain to fireworks."], "Stack rain, snow, fireflies, sparkles and more."),
-    ("editor-presets", ["Magic presets,", "one tap."], "A starting point you can change completely."),
-    ("editor-looks", ["Looks, text", "and stickers."], "Filters, film grain and animated titles."),
-    ("export", ["Export MP4", "or GIF."], "No watermark. Your photos stay on your device."),
+    ("editor-presets", ["18 Magic presets,", "one tap each."], "Starting points you can change completely."),
+    ("editor-effects", ["Bring the whole", "picture to life."], "Ripples, waves, wind sway, heat haze, shimmer."),
+    ("editor-camera", ["Move the camera", "through the photo."], "Zoom, pan, drift, rotate and handheld shake."),
+    ("editor-looks", ["24 looks and", "adjust dials."], "Plus film grain, text and stickers."),
+    ("export", ["Export MP4,", "GIF or still."], "No watermark. Sizes up to what your device supports."),
+    ("home-filled", ["Everything stays", "on your device."], "No account. Free, with ads."),
 ]
 
 
@@ -86,6 +86,7 @@ def rounded_top(im, radius):
 
 
 def wrap_text(draw, text, fnt, max_w):
+    """Greedy wrap, then rebalance two-line results so no line is a lone word (no orphans)."""
     words, lines, cur = text.split(), [], ""
     for w in words:
         trial = (cur + " " + w).strip()
@@ -96,6 +97,15 @@ def wrap_text(draw, text, fnt, max_w):
             cur = w
     if cur:
         lines.append(cur)
+    if len(lines) == 2:
+        best = None
+        for i in range(1, len(words)):
+            a, b = " ".join(words[:i]), " ".join(words[i:])
+            w = max(draw.textlength(a, font=fnt), draw.textlength(b, font=fnt))
+            if w <= max_w and (best is None or w < best[0]):
+                best = (w, [a, b])
+        if best:
+            lines = best[1]
     return lines
 
 
@@ -114,7 +124,7 @@ def make_slide(W, H, shot_path, lines, caption, opts, brand=False):
         d.text((W / 2, y), line, font=head_f, fill=PAPER, anchor="ma")
         y += int(opts["head"] * 1.14)
     y += int(opts["head"] * 0.10)
-    for sl in wrap_text(d, caption, sub_f, W * 0.78):
+    for sl in wrap_text(d, caption, sub_f, W * 0.86):
         d.text((W / 2, y), sl, font=sub_f, fill=MIST, anchor="ma")
         y += int(opts["sub"] * 1.38)
     # the capture: rounded top, bleeding off the bottom edge like a phone rising into frame
