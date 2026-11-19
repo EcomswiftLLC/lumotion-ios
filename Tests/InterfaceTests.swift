@@ -136,6 +136,23 @@ final class InterfaceTests: XCTestCase {
         XCTAssertEqual(coordinator.offeredResolutions(for: .h264), model.availableResolutions(codec: .h264))
     }
 
+    func testRewardedGraceCountsFromTheEndOfTheExport() {
+        var policy = RewardedPolicy()
+        let start = Date()
+        policy.didEarnReward(now: start)
+        // A long render: ten minutes later the export is still the one the ad paid for, so no second ad is offered.
+        XCTAssertFalse(policy.shouldOffer(adReady: true, now: start.addingTimeInterval(600)))
+        // It ends. Save then Share within two minutes of that still asks nothing.
+        let end = start.addingTimeInterval(660)
+        policy.exportDidEnd(now: end)
+        XCTAssertFalse(policy.shouldOffer(adReady: true, now: end.addingTimeInterval(100)))
+        XCTAssertTrue(policy.shouldOffer(adReady: true, now: end.addingTimeInterval(121)))
+        // An export that no ad paid for does not start a new cover.
+        var fresh = RewardedPolicy()
+        fresh.exportDidEnd(now: end)
+        XCTAssertTrue(fresh.shouldOffer(adReady: true, now: end))
+    }
+
     func testRewardedPolicyGrace() {
         var policy = RewardedPolicy()
         XCTAssertTrue(policy.shouldOffer(adReady: true))

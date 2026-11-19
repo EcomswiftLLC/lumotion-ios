@@ -101,25 +101,39 @@ struct ExportScreen: View {
             GeometryReader { geo in
                 // Side by side only when the screen is wider than tall; an upright iPad stacks the preview over the options.
                 let sideBySide = geo.size.width >= 760 && geo.size.width > geo.size.height
+                // On short screens (a phone on its side, a form sheet) the preview shrinks so the options stay in reach.
+                let base: CGFloat = hSize == .regular ? 540 : 420
+                let previewCap = sideBySide ? max(120, geo.size.height - 48) : max(120, min(base, geo.size.height * 0.36))
                 ScrollView {
                     Group {
                         if sideBySide {
                             HStack(alignment: .top, spacing: LM.Space.l) {
-                                preview.frame(maxWidth: .infinity)
+                                preview(maxHeight: previewCap).frame(maxWidth: .infinity)
                                 VStack(alignment: .leading, spacing: LM.Space.l) { controls }
                                     .frame(maxWidth: 440)
                             }
                         } else {
                             VStack(alignment: .leading, spacing: LM.Space.l) {
-                                preview
+                                preview(maxHeight: previewCap)
                                 controls
                             }
                         }
                     }
                     .padding(.horizontal, LM.Space.m)
-                    .padding(.bottom, LM.Space.xl)
+                    .padding(.bottom, LM.Space.l)
                     .readableWidth(sideBySide ? 1000 : (hSize == .regular ? 760 : 640))
                 }
+            }
+            // Save, Share and Save to Files are always on screen, whatever the screen height.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                ExportActionBar(coordinator: coordinator)
+                    .padding(.horizontal, LM.Space.m)
+                    .padding(.top, LM.Space.s)
+                    .padding(.bottom, LM.Space.s)
+                    .frame(maxWidth: 640)
+                    .frame(maxWidth: .infinity)
+                    .background(LM.Palette.lens.opacity(0.96).ignoresSafeArea(edges: .bottom))
+                    .overlay(alignment: .top) { Rectangle().fill(LM.Palette.line).frame(height: 1) }
             }
             .apScreen()
             .navigationTitle("Export")
@@ -137,7 +151,7 @@ struct ExportScreen: View {
         .preferredColorScheme(.dark)
         .interactiveDismissDisabled(coordinator.isBusy)
         .onChange(of: coordinator.choice) { _, _ in coordinator.clearStatus() }
-        .onChange(of: scenePhase) { _, phase in coordinator.sceneChanged(active: phase == .active) }
+        .onChange(of: scenePhase) { _, phase in coordinator.sceneChanged(background: phase == .background) }
         .onAppear {
             coordinator.sourceLongSide = sourceLongSide
             coordinator.clampChoice()
@@ -145,12 +159,12 @@ struct ExportScreen: View {
     }
 
     @ViewBuilder
-    private var preview: some View {
+    private func preview(maxHeight: CGFloat) -> some View {
         if let previewImage {
             Image(uiImage: previewImage)
                 .resizable()
                 .scaledToFit()
-                .frame(maxHeight: hSize == .regular ? 540 : 420)
+                .frame(maxHeight: maxHeight)
                 .clipShape(RoundedRectangle(cornerRadius: LM.Radius.control, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: LM.Radius.control, style: .continuous).strokeBorder(LM.Palette.line))
                 .frame(maxWidth: .infinity)
@@ -164,7 +178,6 @@ struct ExportScreen: View {
         estimateLine
         warningLine
         progressSection
-        ExportActionBar(coordinator: coordinator)
     }
 
     private var resolutions: [ExportResolution] {

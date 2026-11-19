@@ -147,6 +147,7 @@ struct AudioPanel: View {
     @State private var errorText: String?
 
     private var audio: AudioTrackSpec? { model.project.audio }
+    private static let minTrim = 0.25
 
     var body: some View {
         PanelBody {
@@ -158,14 +159,32 @@ struct AudioPanel: View {
                 // Trimming needs a file long enough to have a range to choose from; very short sounds play whole.
                 if audioLength >= 1.0 {
                     PanelSection(title: "Trim", detail: "Choose which part of the file plays.") {
-                        ParamDial(title: "Starts at", value: audioBinding(\.trimStart), range: 0...max(audioLength - 0.5, 0.5), defaultValue: 0, unit: " s", decimals: 1)
+                        // The two handles never cross: at least a quarter second always plays.
+                        ParamDial(
+                            title: "Starts at",
+                            value: Binding(
+                                get: { audio.trimStart },
+                                set: { value in
+                                    setAudio("audio-trimStart") {
+                                        let end = $0.trimEnd ?? audioLength
+                                        $0.trimStart = max(0, min(value, end - Self.minTrim))
+                                    }
+                                }
+                            ),
+                            range: 0...max(audioLength - Self.minTrim, Self.minTrim), defaultValue: 0, unit: " s", decimals: 1
+                        )
                         ParamDial(
                             title: "Ends at",
                             value: Binding(
                                 get: { audio.trimEnd ?? audioLength },
-                                set: { value in setAudio("audio-end") { $0.trimEnd = value >= audioLength - 0.05 ? nil : value } }
+                                set: { value in
+                                    setAudio("audio-end") {
+                                        let end = max(value, $0.trimStart + Self.minTrim)
+                                        $0.trimEnd = end >= audioLength - 0.05 ? nil : end
+                                    }
+                                }
                             ),
-                            range: 0.5...max(0.5, audioLength), defaultValue: audioLength, unit: " s", decimals: 1
+                            range: Self.minTrim...max(Self.minTrim, audioLength), defaultValue: audioLength, unit: " s", decimals: 1
                         )
                     }
                 }

@@ -137,10 +137,20 @@ final class ExportCoordinator: ObservableObject {
     }
 
     /// The project changed, so a file made earlier no longer matches it.
+    /// The file is not deleted here: it may have been shared or saved a moment ago and still be in use. It is no longer
+    /// reused, and `clearOldExports` removes it once it has been idle for a few minutes.
     func invalidateCache() {
         revision += 1
-        cached?.item.deleteFile()
         cached = nil
+    }
+
+    /// Exports idle for this long (seconds) are removed after each export.
+    private static let idleExportAge: TimeInterval = 300
+
+    /// Called when the editor closes: nothing is being shared any more, so the exports of this session can go.
+    func finishSession() {
+        cancel()
+        Exporter.clearOldExports(keeping: [shareURL, filesURL].compactMap { $0 }, olderThan: 0)
     }
 
     // MARK: Running
@@ -151,9 +161,13 @@ final class ExportCoordinator: ObservableObject {
         if action == .photos {
             // Ask for Photos access first, so nobody watches an ad and waits for a render just to be told no.
             checkingAccess = true
+            // Tied to a generation, so Cancel (or Done) while the permission prompt is up wins over its answer.
+            generation += 1
+            let id = generation
             Task {
                 let allowed = await LibrarySaver.ensureAccess()
                 checkingAccess = false
+                guard id == generation else { return }
                 guard allowed else {
                     photosDenied = true
                     phase = .failed(Self.deniedText)
@@ -205,8 +219,10 @@ final class ExportCoordinator: ObservableObject {
             await self.run(action, generation: id)
             self.endProtection()
             self.winding = false
-            // Older exports go; the file that is cached, being shared or being saved to Files stays.
-            Exporter.clearOldExports(keeping: [self.cached?.item.url, self.shareURL, self.filesURL].compactMap { $0 })
+            // A watched ad covers exports for two minutes from now, however long this one took.
+            RewardedGate.shared.exportEnded()
+            // Files that have sat unused for a few minutes go; the cached one and any being shared or saved stay.
+            Exporter.clearOldExports(keeping: [self.cached?.item.url, self.shareURL, self.filesURL].compactMap { $0 }, olderThan: Self.idleExportAge)
         }
     }
 
@@ -218,8 +234,8 @@ final class ExportCoordinator: ObservableObject {
             switch action {
             case .photos:
                 try await LibrarySaver.save(item)
-                guard id == generation else { return }
-                LMHaptics.success()
+                // Even when Cancel was pressed while Photos was writing, the file did land there, so say so.
+                if id == generation { LMHaptics.success() }
                 phase = .saved(item.kind == .video ? "Saved to Photos. Find it in Recents." : "Saved to Photos.")
             case .share:
                 phase = .idle
@@ -247,9 +263,10 @@ final class ExportCoordinator: ObservableObject {
 
     private static let backgroundText = "Keep Lumotion open while exporting. The export stopped when the app went to the background. Try again."
 
-    /// The export screen reports when the app leaves the foreground, so a stopped export can say why.
-    func sceneChanged(active: Bool) {
-        if !active && phase == .rendering { wentToBackground = true }
+    /// The export screen reports when the app is really in the background, so a stopped export can say why. Passing
+    /// through the inactive state (a notification, Control Center, the app switcher peek) does not count.
+    func sceneChanged(background: Bool) {
+        if background && phase == .rendering { wentToBackground = true }
     }
 
     private func finishCancelled(_ id: Int) {
@@ -280,7 +297,7 @@ final class ExportCoordinator: ObservableObject {
             // The project changed while this was rendering: use the file once, but do not keep it for later.
             return item
         }
-        if let old = cached?.item, old.url != item.url { old.deleteFile() }
+        // An older file is left for `clearOldExports`: it may have been shared a moment ago and still be in use.
         cached = (requested, item)
         return item
     }
@@ -300,8 +317,10 @@ final class ExportCoordinator: ObservableObject {
     private func beginProtection() {
         previousIdleTimer = UIApplication.shared.isIdleTimerDisabled
         UIApplication.shared.isIdleTimerDisabled = true
+        // UIKit calls the expiry handler on the main thread and expects the task to be ended before it returns, so the
+        // handler runs on the main actor right away instead of hopping through a new task.
         backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "Lumotion export") { [weak self] in
-            Task { @MainActor in self?.backgroundTimeExpired() }
+            MainActor.assumeIsolated { self?.backgroundTimeExpired() }
         }
     }
 

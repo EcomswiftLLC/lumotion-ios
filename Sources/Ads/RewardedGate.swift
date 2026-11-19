@@ -7,21 +7,37 @@ struct RewardedPolicy: Equatable {
     /// One watched ad covers every export for this long, so saving and then sharing the same result asks only once.
     static let graceInterval: TimeInterval = 120
 
+    /// Longest an export that a watched ad paid for is assumed to be running (a safety net if it never reports back).
+    static let longestExport: TimeInterval = 30 * 60
+
     private(set) var lastReward: Date?
+    /// Set when the export a watched ad paid for starts, cleared when that export ends.
+    private(set) var coveredExportStart: Date?
 
     /// True when the person should be offered an ad before this export. Never when no ad is ready.
     func shouldOffer(adReady: Bool, now: Date = Date()) -> Bool {
         guard adReady else { return false }
-        if let lastReward, now.timeIntervalSince(lastReward) < Self.graceInterval { return false }
+        if isWithinGrace(now: now) { return false }
         return true
     }
 
+    /// A watched ad pays for the export that follows it.
     mutating func didEarnReward(now: Date = Date()) {
+        lastReward = now
+        coveredExportStart = now
+    }
+
+    /// The export the ad paid for ended, whether it worked, failed or was cancelled. The two minutes count from here, so
+    /// a long render followed by Save and then Share still asks only once.
+    mutating func exportDidEnd(now: Date = Date()) {
+        guard coveredExportStart != nil else { return }
+        coveredExportStart = nil
         lastReward = now
     }
 
-    /// True while a watched ad still covers exports.
+    /// True while a watched ad still covers exports: during the export it paid for, and for two minutes after it ends.
     func isWithinGrace(now: Date = Date()) -> Bool {
+        if let start = coveredExportStart, now.timeIntervalSince(start) < Self.longestExport { return true }
         guard let lastReward else { return false }
         return now.timeIntervalSince(lastReward) < Self.graceInterval
     }
@@ -187,6 +203,11 @@ final class RewardedGate: NSObject, FullScreenContentDelegate {
                 }
             }
         }
+    }
+
+    /// Call when an export finishes, fails or is cancelled. Restarts the two-minute cover of a watched ad.
+    func exportEnded() {
+        policy.exportDidEnd()
     }
 
     private func show(then action: @escaping () -> Void) {

@@ -121,9 +121,13 @@ struct CameraPicker: UIViewControllerRepresentable {
 
     final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
         let onPhoto: (PhotoSource?) -> Void
+        /// The picker reports once; a second Use Photo tap while the photo is being prepared must not deliver again.
+        private var delivered = false
         init(onPhoto: @escaping (PhotoSource?) -> Void) { self.onPhoto = onPhoto }
 
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            guard !delivered else { return }
+            delivered = true
             guard let image = info[.originalImage] as? UIImage else {
                 onPhoto(nil)
                 return
@@ -137,7 +141,11 @@ struct CameraPicker: UIViewControllerRepresentable {
             }
         }
 
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { onPhoto(nil) }
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            guard !delivered else { return }
+            delivered = true
+            onPhoto(nil)
+        }
     }
 }
 

@@ -358,6 +358,8 @@ final class EditorModel: ObservableObject {
             if let thumbnail = snapshot.renderFrame(time: 0, quality: RenderQuality(longEdge: 480)) {
                 store.saveThumbnail(thumbnail, for: id)
             }
+            // Home does not need the decoded cinemagraph frames this render may have loaded.
+            VideoStoreCache.shared.clear()
         }
     }
 

@@ -52,7 +52,7 @@ struct HomeView: View {
                 if split {
                     splitLayout(width: geo.size.width)
                 } else {
-                    stackedLayout(landscape: landscape)
+                    stackedLayout(landscape: landscape, height: geo.size.height)
                 }
             }
         }
@@ -171,11 +171,11 @@ struct HomeView: View {
         }
     }
 
-    private func stackedLayout(landscape: Bool) -> some View {
-        stackedContent(landscape: landscape)
+    private func stackedLayout(landscape: Bool, height: CGFloat) -> some View {
+        stackedContent(landscape: landscape, height: height)
     }
 
-    private func stackedContent(landscape: Bool) -> some View {
+    private func stackedContent(landscape: Bool, height: CGFloat) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: LM.Space.xl) {
                 topBar
@@ -183,7 +183,7 @@ struct HomeView: View {
                     HStack(alignment: .center, spacing: LM.Space.l) {
                         HeroLoopView(image: heroImage)
                             .frame(maxWidth: .infinity)
-                            .frame(height: 240)
+                            .frame(height: min(240, max(150, height * 0.4)))
                         VStack(alignment: .leading, spacing: LM.Space.m) {
                             headline
                             actions
@@ -192,7 +192,7 @@ struct HomeView: View {
                     }
                 } else {
                     HeroLoopView(image: heroImage)
-                        .frame(height: hSize == .regular ? 360 : 280)
+                        .frame(height: min(hSize == .regular ? 360 : 280, max(180, height * 0.38)))
                     VStack(alignment: .leading, spacing: LM.Space.m) {
                         headline
                         actions

@@ -138,7 +138,11 @@ struct EditorContent: View {
             exporter.sourceLongSide = max(model.project.source.pixelWidth, model.project.source.pixelHeight)
             model.onChange = { [weak exporter] in exporter?.invalidateCache() }
         }
-        .onDisappear { model.stopPreview() }
+        .onDisappear {
+            model.stopPreview()
+            // The editor is closing: exports made in this session are no longer needed.
+            exporter.finishSession()
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { model.saveNow() }
         }
