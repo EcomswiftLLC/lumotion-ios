@@ -39,7 +39,8 @@ final class RenderEngine {
     private let lock = NSLock()
     private var snap: Snapshot
     private var version = 0
-    private let memo = Memo(budgetBytes: 700 * 1024 * 1024)
+    private let memo = Memo(budgetBytes: RenderEngine.memoBudgetBytes)
+    private var localStore: (key: String, store: VideoFrameStore)?
     private var adaptiveEdge = 720
     private var smoothedMs: Double = 0
 
@@ -91,8 +92,49 @@ final class RenderEngine {
         memo.removeAll()
     }
 
-    /// Frees cached pictures and masks (call on memory warnings).
+    /// Bytes the render cache may hold: 12 percent of the device memory, at most 700 MB and at least 128 MB.
+    static var memoBudgetBytes: Int {
+        let ram = Int(min(ProcessInfo.processInfo.physicalMemory, UInt64(Int.max / 4)))
+        return min(700 * 1024 * 1024, max(128 * 1024 * 1024, ram / 100 * 12))
+    }
+
+    /// Frees cached pictures and masks.
     func clearCaches() { memo.removeAll() }
+
+    /// Call from `UIApplication.didReceiveMemoryWarningNotification`. Drops every cache the engine owns: rendered pictures
+    /// and masks, the text bitmaps, and the decoded cinemagraph frames (they are read again from the video when the next
+    /// frame needs them). An export that is running keeps the frames it holds, so it finishes normally.
+    func handleMemoryWarning() {
+        memo.removeAll()
+        LayerRenderer.clearCache()
+        lock.lock()
+        localStore = nil
+        lock.unlock()
+        VideoStoreCache.shared.clear()
+    }
+
+    /// The longest canvas edge, in pixels, that an export can fill with real detail. Photos can go to 4096. For a
+    /// cinemagraph the moving part comes from decoded frames of a fixed size (see `VideoFrameStore.plan`), so asking for
+    /// more only makes it softer; the UI should not offer sizes above this (but never below 1280, the 720p size).
+    var maxUsefulExportLongEdge: Int {
+        let s = current()
+        return RenderEngine.maxUsefulExportLongEdge(project: s.project, assets: s.assets)
+    }
+
+    /// See `maxUsefulExportLongEdge`.
+    static func maxUsefulExportLongEdge(project: Project, assets: SourceAssets) -> Int {
+        guard project.source.kind == .video, let url = assets.videoURL, let info = VideoFrameStore.cachedVideoInfo(url) else { return 4096 }
+        let cine = project.cinemagraph
+        let plan = VideoFrameStore.plan(videoSize: info.size, videoFPS: info.fps, videoDuration: info.duration, start: cine.segmentStart,
+                                        length: cine.segmentLength, budgetBytes: VideoFrameStore.defaultBudgetBytes)
+        let mapping = FrameMapping(project: project)
+        let reference = RenderEngine.canvasSize(for: project, longEdge: 1000)
+        // The store has `plan.width` pixels across the whole picture; the canvas shows `ax` of it (more than the picture with fit).
+        let kx = Double(plan.width) * mapping.ax / Double(max(1, reference.width))
+        let ky = Double(plan.height) * mapping.ay / Double(max(1, reference.height))
+        let useful = Int((1000 * min(kx, ky)).rounded())
+        return min(4096, max(1280, useful))
+    }
 
     /// The long edge the adaptive preview currently renders at (360...720).
     var previewLongEdge: Int {
@@ -144,7 +186,8 @@ final class RenderEngine {
         let start = CACurrentMediaTime()
         let image = renderBuffer(time: time, quality: RenderQuality(longEdge: edge), token: token)?.makeCGImage()
         let ms = (CACurrentMediaTime() - start) * 1000
-        if image != nil {
+        // A frame that took over a second included reading the video; it says nothing about the speed of rendering.
+        if image != nil && ms < 1000 {
             lock.lock()
             smoothedMs = smoothedMs == 0 ? ms : smoothedMs * 0.7 + ms * 0.3
             if smoothedMs > 38 && adaptiveEdge > 360 {
@@ -220,15 +263,27 @@ final class RenderEngine {
         return buffer
     }
 
-    private func frameStore(_ s: Snapshot, longEdge: Int, token: RenderToken?) -> VideoFrameStore? {
+    /// The decoded frames of the segment: one store per project, the same for every preview size and for exports. The
+    /// decode runs outside the render cache's lock (see `VideoStoreCache`), so previews of other pictures are not held up.
+    private func frameStore(_ s: Snapshot, token: RenderToken?) -> VideoFrameStore? {
         guard let url = s.assets.videoURL else { return nil }
-        let edge = min(max(longEdge, 480), 1280)
-        let key = MemoKey(tag: "cinestore", a: combine(s.version, s.digests.cinemaSegment), b: 0, w: edge, h: 0)
-        let box: Boxed<VideoFrameStore> = memo.get(key, cost: { $0.value?.byteCost ?? 16 }) {
-            Boxed(value: VideoFrameStore.extract(url: url, start: s.project.cinemagraph.segmentStart, length: s.project.cinemagraph.segmentLength,
-                                                 maxLongEdge: edge, budgetBytes: 150 * 1024 * 1024, token: token))
+        let cine = s.project.cinemagraph
+        let budget = VideoFrameStore.defaultBudgetBytes
+        let stillPart = cine.stabilize ? cine.stillTime : 0
+        let key = "\(url.path)|\(cine.segmentStart)|\(cine.segmentLength)|\(cine.stabilize)|\(stillPart)|\(budget)"
+        lock.lock()
+        if let held = localStore, held.key == key { lock.unlock(); return held.store }
+        lock.unlock()
+        let store = VideoStoreCache.shared.store(for: key) {
+            VideoFrameStore.extract(url: url, start: cine.segmentStart, length: cine.segmentLength, budgetBytes: budget,
+                                    stabilize: cine.stabilize, stillTime: cine.stillTime, token: token)
         }
-        return box.value
+        if let store {
+            lock.lock()
+            localStore = (key, store)
+            lock.unlock()
+        }
+        return store
     }
 
     private func cinemaMask(_ s: Snapshot, _ w: Int, _ h: Int) -> FloatField {
@@ -324,7 +379,7 @@ final class RenderEngine {
             guard let base = canvasBase(s, w, h) else { return nil }
             return looked(s, base: base, w, h)
         }
-        guard let still = cinemaStill(s, w, h), let store = frameStore(s, longEdge: quality.longEdge, token: token) else { return nil }
+        guard let still = cinemaStill(s, w, h), let store = frameStore(s, token: token) else { return nil }
         let loop = s.project.loop
         let cine = s.project.cinemagraph
         var u = time / loop.clampedDuration

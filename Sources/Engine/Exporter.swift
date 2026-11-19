@@ -51,13 +51,18 @@ final class Exporter {
         FileManager.default.temporaryDirectory.appendingPathComponent("LumotionExports", isDirectory: true)
     }
 
-    /// Deletes exports older than `age` seconds (default one day). Call at launch.
-    static func clearOldExports(olderThan age: TimeInterval = 86_400) {
+    /// Deletes finished exports (and the leftovers of failed ones) from the exports folder. Files in `keeping` are never
+    /// touched, and neither is anything newer than `age` seconds (default one day), so a file that was just shared stays
+    /// available. Call it at launch, and after each new export with that export's file in `keeping`.
+    /// Pass `olderThan: 0` to clear everything except `keeping`.
+    static func clearOldExports(keeping: [URL] = [], olderThan age: TimeInterval = 86_400) {
         let fm = FileManager.default
         guard let files = try? fm.contentsOfDirectory(at: exportsFolder, includingPropertiesForKeys: [.contentModificationDateKey]) else { return }
+        let kept = Set(keeping.map { $0.standardizedFileURL.path })
         for file in files {
+            if kept.contains(file.standardizedFileURL.path) { continue }
             let date = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
-            if Date().timeIntervalSince(date) > age { try? fm.removeItem(at: file) }
+            if Date().timeIntervalSince(date) >= age { try? fm.removeItem(at: file) }
         }
     }
 
@@ -86,28 +91,79 @@ final class Exporter {
         return ExportEstimate(bytes: Int64(video + audio), frameCount: frames, width: canvas.width, height: canvas.height, note: nil)
     }
 
-    private func gifPlan(_ options: GIFOptions) -> (width: Int, height: Int, frames: Int, note: String?, delay: Double) {
+    /// Most bytes of indexed GIF pixels held at once (ImageIO keeps every frame until the file is finished).
+    private static let gifPixelBudget = 48 * 1024 * 1024
+
+    private struct GIFPlan {
+        var width: Int
+        var height: Int
+        /// One entry per frame: how long it is shown, in centiseconds (the only unit the GIF format knows).
+        var delays: [Int]
+        var note: String?
+        var capped: Bool
+        var frames: Int { delays.count }
+    }
+
+    /// Frame delays for a loop of `duration` seconds at about `fps` frames per second. A GIF stores delays in whole
+    /// centiseconds, so most frame rates cannot be exact (30 fps is 3.33). Instead of rounding every frame and drifting,
+    /// the delays here add up to exactly the loop length in centiseconds: when a whole number of centiseconds per frame
+    /// gives a frame count within 12 percent of what was asked for (for example 3 centiseconds and 140 frames for 4.2
+    /// seconds at 30 fps) that is used, otherwise the delays differ by at most one centisecond (3, 3, 4, 3, 3, 4 ...).
+    /// No delay is below 2 centiseconds, the shortest browsers honour. `frameCap` limits the frame count; `capped`
+    /// tells whether a limit lowered the frame rate.
+    static func gifTiming(duration: Double, fps: Int, frameCap: Int) -> (delays: [Int], capped: Bool) {
+        let total = max(2, Int((duration * 100).rounded()))
+        let desired = max(1, Int((duration * Double(max(1, fps))).rounded()))
+        let limit = max(1, min(frameCap, total / 2))
+        var frames = desired
+        var capped = false
+        if desired > limit {
+            frames = limit
+            capped = true
+        } else {
+            let base = 100 / max(1, fps)
+            var best: Int?
+            for cs in [base, base + 1] where cs >= 2 && total % cs == 0 {
+                let n = total / cs
+                guard n <= limit, abs(Double(n) / Double(desired) - 1) <= 0.12 else { continue }
+                if let current = best, abs(current - desired) <= abs(n - desired) { continue }
+                best = n
+            }
+            if let n = best { frames = n }
+        }
+        var delays = [Int]()
+        delays.reserveCapacity(frames)
+        var used = 0
+        for i in 0..<frames {
+            let next = (i + 1) * total / frames
+            delays.append(next - used)
+            used = next
+        }
+        return (delays, capped)
+    }
+
+    private func gifPlan(_ options: GIFOptions) -> GIFPlan {
         let o = options.clamped
         let ratio = project.canvas.aspect.ratio(sourceAspect: project.source.aspect)
         let longEdge = ratio >= 1 ? o.width : Int((Double(o.width) / ratio).rounded())
         let size = RenderEngine.canvasSize(for: project, longEdge: longEdge)
-        let duration = project.loop.clampedDuration
-        var frames = max(1, Int((duration * Double(o.fps)).rounded()))
-        var note: String?
-        let cap = max(1, 160 * 1024 * 1024 / max(1, size.width * size.height))
-        if frames > cap {
-            frames = cap
-            note = "To stay within memory, the GIF uses fewer frames per second at this size."
-        }
-        return (size.width, size.height, frames, note, duration / Double(frames))
+        let cap = max(1, Exporter.gifPixelBudget / max(1, size.width * size.height))
+        let timing = Exporter.gifTiming(duration: project.loop.clampedDuration, fps: o.fps, frameCap: cap)
+        let note = timing.capped ? "To stay within memory, the GIF uses fewer frames per second at this size." : nil
+        return GIFPlan(width: size.width, height: size.height, delays: timing.delays, note: note, capped: timing.capped)
     }
 
-    /// Size estimate for a GIF before it is rendered.
+    /// Size estimate for a GIF before it is rendered. `isCapped` and `note` say when the frame rate had to be lowered.
     func estimateGIF(options: GIFOptions) -> ExportEstimate {
         let plan = gifPlan(options)
         let perPixel = 0.45 + 0.2 * Double(options.clamped.paletteColors) / 256
         let bytes = Double(plan.width * plan.height * plan.frames) * perPixel
-        return ExportEstimate(bytes: Int64(bytes), frameCount: plan.frames, width: plan.width, height: plan.height, note: plan.note)
+        return ExportEstimate(bytes: Int64(bytes), frameCount: plan.frames, width: plan.width, height: plan.height, note: plan.note, isCapped: plan.capped)
+    }
+
+    /// The longest canvas edge an export can fill with real detail (4096 for photos, less for some cinemagraphs).
+    var maxUsefulExportLongEdge: Int {
+        RenderEngine.maxUsefulExportLongEdge(project: project, assets: assets)
     }
 
     /// Resolutions the device can encode with the codec. Larger sizes need more memory because every frame is rendered at that size.
@@ -120,6 +176,16 @@ final class Exporter {
             return []
         }
         return list
+    }
+
+    /// The sizes to offer for this project: `supportedResolutions` without the ones above what the project's pictures
+    /// can fill (a cinemagraph's moving part is decoded at a fixed size, so 4K would only be a bigger, softer picture).
+    /// 720p is always included when the codec works at all.
+    func availableResolutions(codec: VideoCodec) -> [ExportResolution] {
+        let useful = maxUsefulExportLongEdge
+        let all = Exporter.supportedResolutions(codec: codec)
+        let fitting = all.filter { $0.longEdge <= useful }
+        return fitting.isEmpty ? Array(all.prefix(1)) : fitting
     }
 
     // MARK: MP4
@@ -188,22 +254,21 @@ final class Exporter {
             throw EngineError.failed("The video file could not be created: \(writer.error?.localizedDescription ?? "unknown error").")
         }
         writer.startSession(atSourceTime: .zero)
+        do {
         if let feeder = audio, !feeder.start() {
-            writer.cancelWriting()
             throw EngineError.failed("The audio file could not be read. Mute the audio or choose another file.")
         }
 
         for i in 0..<frames {
-            if token.isCancelled { writer.cancelWriting(); throw EngineError.cancelled }
+            if token.isCancelled { throw EngineError.cancelled }
             let time = Double(i) / Double(fps)
             guard let frame = engine.renderBuffer(time: time, quality: quality, token: token) else {
-                writer.cancelWriting()
                 if token.isCancelled { throw EngineError.cancelled }
                 throw EngineError.failed("A frame could not be rendered. Check that the photo or video is still available.")
             }
             while !input.isReadyForMoreMediaData {
                 if writer.status == .failed { throw EngineError.failed("The video could not be written: \(writer.error?.localizedDescription ?? "unknown error").") }
-                if token.isCancelled { writer.cancelWriting(); throw EngineError.cancelled }
+                if token.isCancelled { throw EngineError.cancelled }
                 audio?.pump(untilSeconds: time + 1)
                 Thread.sleep(forTimeInterval: 0.002)
             }
@@ -232,11 +297,19 @@ final class Exporter {
         input.markAsFinished()
         if let feeder = audio {
             while !feeder.finished {
-                if token.isCancelled { writer.cancelWriting(); throw EngineError.cancelled }
+                if token.isCancelled { throw EngineError.cancelled }
                 if writer.status == .failed { break }
                 feeder.pump(untilSeconds: .infinity)
                 if !feeder.finished { Thread.sleep(forTimeInterval: 0.002) }
             }
+        }
+        } catch {
+            // Whatever went wrong (cancelled, a frame that would not render, a full disk), the writer is stopped before it
+            // is released: an AVAssetWriter that is deallocated while it is still writing crashes the app. cancelWriting
+            // also removes the partly written file.
+            audio?.cancel()
+            if writer.status == .writing { writer.cancelWriting() }
+            throw error
         }
         let done = DispatchSemaphore(value: 0)
         writer.finishWriting { done.signal() }
@@ -257,8 +330,8 @@ final class Exporter {
         let url = try outputURL(ext: "gif")
         return try await runBlocking { token in
             do {
-                try Exporter.writeGIF(project: project, assets: assets, width: plan.width, height: plan.height, frames: plan.frames,
-                                      delay: plan.delay, options: opts, to: url, token: token, progress: progress)
+                try Exporter.writeGIF(project: project, assets: assets, width: plan.width, height: plan.height, delays: plan.delays,
+                                      options: opts, to: url, token: token, progress: progress)
             } catch {
                 try? FileManager.default.removeItem(at: url)
                 throw error
@@ -272,8 +345,10 @@ final class Exporter {
         try await exportGIF(options: GIFOptions(width: width, fps: fps), progress: progress)
     }
 
-    private static func writeGIF(project: Project, assets: SourceAssets, width: Int, height: Int, frames: Int, delay: Double,
+    private static func writeGIF(project: Project, assets: SourceAssets, width: Int, height: Int, delays: [Int],
                                  options: GIFOptions, to url: URL, token: RenderToken, progress: ExportProgress?) throws {
+        let frames = delays.count
+        let totalCentiseconds = max(1, delays.reduce(0, +))
         let engine = RenderEngine(project: project, assets: assets)
         let ratio = project.canvas.aspect.ratio(sourceAspect: project.source.aspect)
         let quality = RenderQuality(longEdge: ratio >= 1 ? width : height)
@@ -285,9 +360,13 @@ final class Exporter {
             kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0],
         ] as CFDictionary)
         let duration = project.loop.clampedDuration
+        var elapsed = 0
         for i in 0..<frames {
             if token.isCancelled { throw EngineError.cancelled }
-            let time = Double(i) * duration / Double(frames)
+            // Frames are sampled where the viewer will see them: at the running total of the delays before them.
+            let time = duration * Double(elapsed) / Double(totalCentiseconds)
+            let delay = Double(delays[i]) / 100
+            elapsed += delays[i]
             guard let frame = engine.renderBuffer(time: time, quality: quality, token: token) else {
                 if token.isCancelled { throw EngineError.cancelled }
                 throw EngineError.failed("A frame could not be rendered. Check that the photo or video is still available.")
@@ -484,6 +563,9 @@ final class AudioFeeder {
 
     /// Starts reading. False when the audio cannot be decoded.
     func start() -> Bool { reader.startReading() }
+
+    /// Stops reading (an export that failed or was cancelled).
+    func cancel() { if reader.status == .reading { reader.cancelReading() } }
 
     /// Appends audio samples until the audio reaches `untilSeconds` or the writer is not ready for more.
     func pump(untilSeconds: Double) {

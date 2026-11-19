@@ -117,8 +117,22 @@ private final class FrameSlots: @unchecked Sendable {
     func snapshot() -> [PixelBuffer?] { lock.lock(); defer { lock.unlock() }; return slots }
 }
 
-/// The frames of one cinemagraph segment, held in memory at reduced size (a fixed byte budget decides the size) so they
-/// can be read in any order while scrubbing and exporting. Reading the video happens once, with AVAssetImageGenerator.
+/// How one cinemagraph segment is sampled: how many frames, at what rate and size. A pure function of the video, the
+/// segment and a byte budget, so the preview, the exporter and `RenderEngine.maxUsefulExportLongEdge` always agree.
+struct VideoFramePlan: Equatable {
+    var segmentStart: Double
+    var segmentLength: Double
+    var fps: Double
+    var count: Int
+    var width: Int
+    var height: Int
+
+    var byteCost: Int { count * width * height * 4 }
+}
+
+/// The frames of one cinemagraph segment, held in memory at one fixed size so they can be read in any order while
+/// scrubbing and exporting. The video is read once, with AVAssetImageGenerator. A few frames per second at a larger size
+/// beat many frames at a small size: neighbouring frames are mixed, so the motion stays smooth.
 final class VideoFrameStore {
     let width: Int
     let height: Int
@@ -137,7 +151,8 @@ final class VideoFrameStore {
 
     /// The picture `seconds` into the segment (0...length). Neighbouring frames are mixed, so slow sampling stays smooth.
     func frame(at seconds: Double) -> PixelBuffer {
-        let t = min(max(seconds, 0), length) * fps
+        let clamped = seconds.isFinite ? seconds : 0
+        let t = min(max(clamped, 0), length) * fps
         let i0 = min(frames.count - 1, Int(t.rounded(.down)))
         let i1 = min(frames.count - 1, i0 + 1)
         let f = Float(t - Double(i0))
@@ -164,6 +179,11 @@ final class VideoFrameStore {
         return out
     }
 
+    // MARK: Video facts
+
+    private static let infoLock = NSLock()
+    private static var infoCache: [String: (size: CGSize, fps: Double, duration: Double)] = [:]
+
     /// Display size of the first video track (rotation applied) and its nominal frame rate. Nil when the file has no video.
     static func videoInfo(_ url: URL) -> (size: CGSize, fps: Double, duration: Double)? {
         let asset = AVURLAsset(url: url)
@@ -175,25 +195,57 @@ final class VideoFrameStore {
         return (size, fps, CMTimeGetSeconds(asset.duration))
     }
 
-    /// Reads the segment `start ... start + length` (seconds). Returns nil when the file cannot be read or `token` is cancelled.
-    static func extract(url: URL, start: Double, length: Double, maxLongEdge: Int, budgetBytes: Int, token: RenderToken?) -> VideoFrameStore? {
+    /// `videoInfo`, remembered per file so the editor can ask often (for example for the export sizes) without reopening the file.
+    static func cachedVideoInfo(_ url: URL) -> (size: CGSize, fps: Double, duration: Double)? {
+        let key = url.path
+        infoLock.lock()
+        if let hit = infoCache[key] { infoLock.unlock(); return hit }
+        infoLock.unlock()
         guard let info = videoInfo(url) else { return nil }
-        let asset = AVURLAsset(url: url)
-        let total = max(0.1, info.duration.isFinite ? info.duration : start + length)
-        let segStart = min(max(start, 0), max(0, total - 0.1))
-        let segLength = max(0.1, min(length, total - segStart))
-        let storeFPS = min(max(info.fps, 8), 24)
-        let count = max(2, Int((segLength * storeFPS).rounded(.up)) + 1)
+        infoLock.lock()
+        infoCache[key] = info
+        infoLock.unlock()
+        return info
+    }
 
-        // Size: as large as the byte budget allows, never above `maxLongEdge` or the video itself.
-        let aspect = Double(info.size.width / info.size.height)
-        let pixelsPerFrame = Double(budgetBytes) / Double(count) / 4
+    /// Bytes the decoded frames of one segment may use: 6 percent of the device memory, between 96 and 256 MB.
+    static var defaultBudgetBytes: Int {
+        let ram = Int(min(ProcessInfo.processInfo.physicalMemory, UInt64(Int.max / 4)))
+        return min(256 * 1024 * 1024, max(96 * 1024 * 1024, ram / 100 * 6))
+    }
+
+    /// Frame rate, count and size for a segment. Segments up to 4 seconds are sampled at 15 frames per second, longer
+    /// ones at 12 (never above the video's own rate); the size is the largest the byte budget allows, never above the
+    /// video itself.
+    static func plan(videoSize: CGSize, videoFPS: Double, videoDuration: Double, start: Double, length: Double, budgetBytes: Int) -> VideoFramePlan {
+        let total = max(0.1, videoDuration.isFinite ? videoDuration : start + length)
+        let segStart = min(max(start.isFinite ? start : 0, 0), max(0, total - 0.1))
+        let segLength = max(0.1, min(length.isFinite ? length : 1, total - segStart))
+        let preferred = segLength <= 4 ? 15.0 : 12.0
+        let fps = min(preferred, max(8, videoFPS))
+        let count = max(2, Int((segLength * fps).rounded(.up)) + 1)
+        let aspect = Double(videoSize.width / max(1, videoSize.height))
+        let pixelsPerFrame = Double(max(1, budgetBytes)) / Double(count) / 4
         var h = (pixelsPerFrame / aspect).squareRoot()
         var w = h * aspect
-        let longest = max(w, h)
-        let cap = Double(min(maxLongEdge, Int(max(info.size.width, info.size.height))))
-        if longest > cap { let k = cap / longest; w *= k; h *= k }
+        if w > Double(videoSize.width) || h > Double(videoSize.height) {
+            let k = min(Double(videoSize.width) / w, Double(videoSize.height) / h)
+            w *= k; h *= k
+        }
         let fw = max(16, Int((w / 2).rounded()) * 2), fh = max(16, Int((h / 2).rounded()) * 2)
+        return VideoFramePlan(segmentStart: segStart, segmentLength: segLength, fps: fps, count: count, width: fw, height: fh)
+    }
+
+    /// Reads the segment `start ... start + length` (seconds) once, at the size `plan` gives. Returns nil when the file
+    /// cannot be read or `token` is cancelled. With `stabilize` every frame is shifted to line up with the picture at
+    /// `stillTime` (see `Stabilizer`).
+    static func extract(url: URL, start: Double, length: Double, budgetBytes: Int, stabilize: Bool = false, stillTime: Double = 0, token: RenderToken?) -> VideoFrameStore? {
+        guard let info = videoInfo(url) else { return nil }
+        let asset = AVURLAsset(url: url)
+        let plan = VideoFrameStore.plan(videoSize: info.size, videoFPS: info.fps, videoDuration: info.duration, start: start, length: length, budgetBytes: budgetBytes)
+        let total = max(0.1, info.duration.isFinite ? info.duration : start + length)
+        let segStart = plan.segmentStart, segLength = plan.segmentLength
+        let storeFPS = plan.fps, count = plan.count, fw = plan.width, fh = plan.height
 
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
@@ -228,6 +280,13 @@ final class VideoFrameStore {
             if let s = slot { last = s }
             frames.append(slot ?? last)
         }
+        if stabilize, frames.count > 1 {
+            if let still = VideoFrameStore.still(url: url, at: stillTime, maxPixel: max(fw, fh)),
+               let reference = PixelBuffer.scaled(still, width: fw, height: fh) {
+                frames = Stabilizer.align(frames, to: reference, token: token)
+            }
+            if token?.isCancelled == true { return nil }
+        }
         return VideoFrameStore(width: fw, height: fh, fps: storeFPS, length: segLength, frames: frames)
     }
 
@@ -242,5 +301,51 @@ final class VideoFrameStore {
         let duration = CMTimeGetSeconds(asset.duration)
         let t = min(max(seconds, 0), duration.isFinite ? max(0, duration - 0.05) : seconds)
         return try? generator.copyCGImage(at: CMTime(seconds: t, preferredTimescale: 600), actualTime: nil)
+    }
+}
+
+// MARK: - Shared frame store
+
+/// Keeps the decoded frames of the segment that is being edited, shared by the live preview and the exporter so the
+/// video is read once per project, not once per preview quality. Holds one store at a time. Decoding happens outside
+/// every other lock, and callers that ask for the same segment at the same time wait for one decode.
+final class VideoStoreCache {
+    static let shared = VideoStoreCache()
+
+    private let state = NSLock()
+    private let decode = NSLock()
+    private var key: String?
+    private var store: VideoFrameStore?
+
+    /// The store for `key`, built with `make` when it is not held yet. Nil when `make` fails or is cancelled.
+    func store(for key: String, make: () -> VideoFrameStore?) -> VideoFrameStore? {
+        if let hit = lookup(key) { return hit }
+        decode.lock(); defer { decode.unlock() }
+        if let hit = lookup(key) { return hit }
+        guard let made = make() else { return nil }
+        state.lock()
+        self.key = key
+        self.store = made
+        state.unlock()
+        return made
+    }
+
+    private func lookup(_ key: String) -> VideoFrameStore? {
+        state.lock(); defer { state.unlock() }
+        return self.key == key ? store : nil
+    }
+
+    /// Bytes of decoded frames held right now.
+    var heldBytes: Int {
+        state.lock(); defer { state.unlock() }
+        return store?.byteCost ?? 0
+    }
+
+    /// Lets go of the held frames (memory warnings, closing a project).
+    func clear() {
+        state.lock()
+        key = nil
+        store = nil
+        state.unlock()
     }
 }

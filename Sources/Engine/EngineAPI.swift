@@ -17,7 +17,31 @@ enum EngineError: LocalizedError {
         case .failed(let what): return what
         }
     }
+
+    /// True for `.cancelled`. Callers use it to stay quiet when the person pressed Cancel instead of showing an error.
+    var isCancelled: Bool {
+        if case .cancelled = self { return true }
+        return false
+    }
+
+    /// True when `error` means "the person stopped it": `EngineError.cancelled` or a Swift `CancellationError`.
+    static func isCancellation(_ error: Error) -> Bool {
+        if let engine = error as? EngineError { return engine.isCancelled }
+        return error is CancellationError
+    }
 }
+
+// MARK: - Housekeeping (what the app should call, and when)
+//
+// - Launch: `Exporter.clearOldExports()` deletes exports older than a day; `ProjectStore.shared.cleanUpOrphans()` removes
+//   project folders that never got a project.json.
+// - After each finished export: `Exporter.clearOldExports(keeping: [url])` frees the older files and keeps the new one.
+// - Memory warning: `engine.handleMemoryWarning()` on the live engine (drops render caches, text bitmaps and decoded
+//   cinemagraph frames).
+// - Export sizes: `exporter.availableResolutions(codec:)` lists the sizes worth offering (a cinemagraph cannot fill 4K);
+//   `exporter.maxUsefulExportLongEdge` is the raw limit. `estimateGIF(options:)` sets `isCapped` and `warning` when the
+//   GIF frame rate had to be lowered to stay within memory.
+// - Errors: `EngineError.isCancelled` / `EngineError.isCancellation(_:)` tell "the person pressed Cancel" from a failure.
 
 // MARK: - Cancellation
 
@@ -83,6 +107,7 @@ final class MaskBuffer {
 
     /// Bilinear sample, `u` and `v` in 0...1 across the whole buffer. Outside the buffer the nearest edge pixel is used.
     func sample(u: Double, v: Double) -> Double {
+        guard u.isFinite, v.isFinite else { return 0 }
         let x = min(max(u * Double(width) - 0.5, 0), Double(width - 1))
         let y = min(max(v * Double(height) - 0.5, 0), Double(height - 1))
         let x0 = Int(x), y0 = Int(y)
@@ -232,6 +257,11 @@ struct ExportEstimate: Hashable {
     var height: Int
     /// Set when the engine had to lower a setting to stay within memory, for example fewer GIF frames.
     var note: String?
+    /// True when `note` explains a lowered setting (the GIF has fewer frames per second than asked for).
+    var isCapped: Bool = false
+
+    /// The text to show next to the estimate when a setting was lowered; nil otherwise.
+    var warning: String? { isCapped ? note : nil }
 }
 
 /// Progress callback, called with 0...1 from a background thread.

@@ -76,7 +76,7 @@ enum LayerRenderer {
                 let common = Common(enabled: true, center: t.center, rotation: t.rotation, scale: t.scale, entrance: t.entrance, exit: t.exit,
                                     idle: t.idle, start: t.startTime, end: t.endTime)
                 guard let anim = animation(common, time: tt, phase: phase, duration: duration) else { continue }
-                let pixelSize = max(6, t.size * Double(h))
+                let pixelSize = min(4000, max(6, t.size * Double(h)))
                 let n = t.text.count
                 let revealCount = anim.state.reveal >= 1 ? n : Int((anim.state.reveal * Double(n)).rounded(.down))
                 if revealCount <= 0 { continue }
@@ -87,7 +87,7 @@ enum LayerRenderer {
                 let common = Common(enabled: true, center: s.center, rotation: s.rotation, scale: s.scale, entrance: s.entrance, exit: s.exit,
                                     idle: s.idle, start: s.startTime, end: s.endTime)
                 guard let anim = animation(common, time: tt, phase: phase, duration: duration) else { continue }
-                guard let image = emojiImage(s.emoji, pointSize: max(6, s.size * Double(h))) else { continue }
+                guard let image = emojiImage(s.emoji, pointSize: min(4000, max(6, s.size * Double(h)))) else { continue }
                 place(image, common: common, anim: anim, ctx: ctx, w: Double(w), h: Double(h))
             }
         }
@@ -150,16 +150,53 @@ enum LayerRenderer {
     private static let cacheLock = NSLock()
     private static var cache: [Int: CGImage] = [:]
     private static var cacheOrder: [Int] = []
+    private static var cacheBytes = 0
 
+    /// Most bytes of text and emoji bitmaps kept at once: 3 percent of the device memory, between 16 and 48 MB.
+    static var cacheByteBudget: Int {
+        let ram = Int(min(ProcessInfo.processInfo.physicalMemory, UInt64(Int.max / 4)))
+        return min(48 * 1024 * 1024, max(16 * 1024 * 1024, ram / 100 * 3))
+    }
+
+    /// Bytes held by the bitmap cache (for tests and diagnostics).
+    static var cachedBytes: Int {
+        cacheLock.lock(); defer { cacheLock.unlock() }
+        return cacheBytes
+    }
+
+    /// Drops every cached text and emoji bitmap (memory warnings).
+    static func clearCache() {
+        cacheLock.lock()
+        cache.removeAll(); cacheOrder.removeAll(); cacheBytes = 0
+        cacheLock.unlock()
+    }
+
+    private static func cost(_ image: CGImage) -> Int { image.width * image.height * 4 }
+
+    /// Least recently used cache with a byte budget. A bitmap bigger than a third of the budget is returned but not kept.
     private static func cached(_ key: Int, make: () -> CGImage?) -> CGImage? {
         cacheLock.lock()
-        if let hit = cache[key] { cacheLock.unlock(); return hit }
+        if let hit = cache[key] {
+            if let i = cacheOrder.lastIndex(of: key) { cacheOrder.remove(at: i); cacheOrder.append(key) }
+            cacheLock.unlock()
+            return hit
+        }
         cacheLock.unlock()
         guard let made = make() else { return nil }
+        let budget = cacheByteBudget
+        let c = cost(made)
+        if c > budget / 3 { return made }
         cacheLock.lock()
-        cache[key] = made
+        if let old = cache.updateValue(made, forKey: key) {
+            cacheBytes -= cost(old)
+            if let i = cacheOrder.lastIndex(of: key) { cacheOrder.remove(at: i) }
+        }
         cacheOrder.append(key)
-        if cacheOrder.count > 96 { let old = cacheOrder.removeFirst(); cache.removeValue(forKey: old) }
+        cacheBytes += c
+        while (cacheBytes > budget || cacheOrder.count > 96) && cacheOrder.count > 1 {
+            let oldest = cacheOrder.removeFirst()
+            if let gone = cache.removeValue(forKey: oldest) { cacheBytes -= cost(gone) }
+        }
         cacheLock.unlock()
         return made
     }
@@ -196,7 +233,7 @@ enum LayerRenderer {
         hasher.combine(t.text); hasher.combine(t.design); hasher.combine(t.weight); hasher.combine(Int(pointSize.rounded()))
         hasher.combine(t.color); hasher.combine(t.outline); hasher.combine(t.shadow); hasher.combine(revealCount)
         let key = hasher.finalize()
-        return cached(key) {
+        let build: () -> CGImage? = {
             let size = CGFloat(pointSize)
             let uiFont = font(design: t.design, weight: t.weight, size: size)
             let paragraph = NSMutableParagraphStyle()
@@ -236,6 +273,10 @@ enum LayerRenderer {
             }
             return image.cgImage
         }
+        // A half-typed line is drawn once and thrown away: caching one bitmap per typed character would fill the cache
+        // with near-identical pictures. Only the finished text is kept, one entry per text layer.
+        if revealCount < t.text.count { return build() }
+        return cached(key, make: build)
     }
 
     private static func emojiImage(_ emoji: String, pointSize: Double) -> CGImage? {

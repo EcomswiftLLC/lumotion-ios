@@ -72,10 +72,15 @@ enum StrokeRaster {
     /// `featherBoost` widens every stroke's soft edge.
     static func forEachStroke(_ strokes: [BrushStroke], width w: Int, height h: Int, featherBoost: Double,
                               _ body: (BrushStroke, _ x0: Int, _ y0: Int, _ x1: Int, _ y1: Int, _ alpha: [Float]) -> Void) {
-        for stroke in strokes where !stroke.points.isEmpty {
-            let pts = stroke.points
-            let r = Float(max(0.0005, stroke.radius)) * Float(max(w, h))
-            let f = Float(min(1, max(0, stroke.feather + featherBoost)))
+        for stroke in strokes {
+            // Points that are not finite numbers (a damaged file) are skipped, and the rest are kept in a sane range so
+            // the Int conversions below can never trap.
+            let pts = stroke.points.filter { $0.x.isFinite && $0.y.isFinite }
+            if pts.isEmpty { continue }
+            let rawRadius = stroke.radius.isFinite ? stroke.radius : 0.04
+            let r = Float(min(2, max(0.0005, rawRadius))) * Float(max(w, h))
+            let rawFeather = stroke.feather.isFinite ? stroke.feather : 0.5
+            let f = Float(min(1, max(0, rawFeather + (featherBoost.isFinite ? featherBoost : 0))))
             let ramp = max(r * f, 1)
             let innerR = max(0, r - ramp)
             var minX = Float.greatestFiniteMagnitude, minY = Float.greatestFiniteMagnitude
@@ -83,8 +88,8 @@ enum StrokeRaster {
             var px = [Float](), py = [Float]()
             px.reserveCapacity(pts.count); py.reserveCapacity(pts.count)
             for p in pts {
-                let x = Float(p.x) * Float(w)
-                let y = Float(p.y) * Float(h)
+                let x = Float(min(max(p.x, -8), 9)) * Float(w)
+                let y = Float(min(max(p.y, -8), 9)) * Float(h)
                 px.append(x); py.append(y)
                 minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
             }

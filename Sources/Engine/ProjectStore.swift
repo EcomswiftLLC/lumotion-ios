@@ -31,6 +31,9 @@ final class ProjectStore {
 
     let rootURL: URL
     private let lock = NSLock()
+    /// Projects deleted during this run: `save` refuses them, so a late autosave cannot bring a deleted project back.
+    private var deleted = Set<UUID>()
+    private var cleanedOrphans = false
 
     init(rootURL: URL) {
         self.rootURL = rootURL
@@ -60,6 +63,7 @@ final class ProjectStore {
 
     private func jsonURL(_ id: UUID) -> URL { folderURL(for: id).appendingPathComponent("project.json") }
     private func backupURL(_ id: UUID) -> URL { folderURL(for: id).appendingPathComponent("project.json.bak") }
+    private func metaURL(_ id: UUID) -> URL { folderURL(for: id).appendingPathComponent("meta.json") }
 
     /// Thumbnail location for a project (may not exist yet).
     func thumbnailURL(for id: UUID) -> URL {
@@ -73,34 +77,77 @@ final class ProjectStore {
 
     // MARK: Listing
 
-    private struct Header: Decodable {
+    /// What the gallery needs about a project, kept in a tiny `meta.json` next to `project.json` so listing a hundred
+    /// projects reads a hundred small files instead of a hundred full projects (strokes can make those large).
+    private struct Meta: Codable {
         var id: UUID
-        var title: String?
-        var createdAt: Date?
-        var modifiedAt: Date?
-        var source: SourceSpec
-        var loop: LoopSpec?
+        var title: String
+        var createdAt: Date
+        var modifiedAt: Date
+        var duration: Double
+        var kind: SourceSpec.Kind
     }
 
-    /// All saved projects, newest first.
+    private static func meta(for p: Project) -> Meta {
+        Meta(id: p.id, title: p.title, createdAt: p.createdAt, modifiedAt: p.modifiedAt, duration: p.loop.duration, kind: p.source.kind)
+    }
+
+    /// All saved projects, newest first. Reads only each project's small meta file; a project saved by an older build
+    /// (no meta file yet) is read in full once and gets its meta file. The first call also removes empty project folders
+    /// left behind by a crash (see `cleanUpOrphans`).
     func listProjects() -> [ProjectListing] {
         lock.lock(); defer { lock.unlock() }
+        if !cleanedOrphans {
+            cleanedOrphans = true
+            _ = removeOrphansLocked(olderThan: 600)
+        }
         guard let folders = try? fm.contentsOfDirectory(at: rootURL, includingPropertiesForKeys: nil) else { return [] }
         let decoder = ProjectStore.makeDecoder()
         var rows = [ProjectListing]()
         for folder in folders {
             guard let id = UUID(uuidString: folder.lastPathComponent) else { continue }
-            var header: Header?
-            for url in [jsonURL(id), backupURL(id)] {
-                if let data = try? Data(contentsOf: url), let h = try? decoder.decode(Header.self, from: data) { header = h; break }
+            var found: Meta?
+            if let data = try? Data(contentsOf: metaURL(id)), let m = try? decoder.decode(Meta.self, from: data), m.id == id { found = m }
+            if found == nil {
+                for url in [jsonURL(id), backupURL(id)] {
+                    if let data = try? Data(contentsOf: url), let project = try? decoder.decode(Project.self, from: data) {
+                        let m = ProjectStore.meta(for: project)
+                        found = m
+                        if let encoded = try? ProjectStore.makeEncoder().encode(m) { try? encoded.write(to: metaURL(id), options: .atomic) }
+                        break
+                    }
+                }
             }
-            guard let h = header else { continue }
+            guard let h = found else { continue }
             let thumb = thumbnailURL(for: id)
             rows.append(ProjectListing(
-                id: id, title: h.title ?? "Untitled loop", createdAt: h.createdAt ?? Date(), modifiedAt: h.modifiedAt ?? h.createdAt ?? Date(),
-                duration: h.loop?.duration ?? 4, kind: h.source.kind, thumbnailURL: fm.fileExists(atPath: thumb.path) ? thumb : nil))
+                id: id, title: h.title, createdAt: h.createdAt, modifiedAt: h.modifiedAt,
+                duration: h.duration, kind: h.kind, thumbnailURL: fm.fileExists(atPath: thumb.path) ? thumb : nil))
         }
         return rows.sorted { $0.modifiedAt > $1.modifiedAt }
+    }
+
+    /// Removes project folders that hold no `project.json` (and no backup): what is left when the app is closed or
+    /// crashes between creating a folder and saving the first version. Folders younger than `age` seconds are left
+    /// alone, because a project may be being created right now. Call at launch; `listProjects` also does it once.
+    /// Returns how many folders were removed.
+    @discardableResult
+    func cleanUpOrphans(olderThan age: TimeInterval = 600) -> Int {
+        lock.lock(); defer { lock.unlock() }
+        return removeOrphansLocked(olderThan: age)
+    }
+
+    private func removeOrphansLocked(olderThan age: TimeInterval) -> Int {
+        guard let folders = try? fm.contentsOfDirectory(at: rootURL, includingPropertiesForKeys: [.contentModificationDateKey]) else { return 0 }
+        var removed = 0
+        for folder in folders {
+            guard let id = UUID(uuidString: folder.lastPathComponent) else { continue }
+            if fm.fileExists(atPath: jsonURL(id).path) || fm.fileExists(atPath: backupURL(id).path) { continue }
+            let date = (try? folder.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+            if Date().timeIntervalSince(date) < age { continue }
+            if (try? fm.removeItem(at: folder)) != nil { removed += 1 }
+        }
+        return removed
     }
 
     // MARK: Creating
@@ -166,6 +213,9 @@ final class ProjectStore {
     /// Writes `project.json` atomically (and updates `modifiedAt`). The previous file is kept as `project.json.bak`.
     func save(_ project: Project) throws {
         lock.lock(); defer { lock.unlock() }
+        if deleted.contains(project.id) {
+            throw EngineError.failed("This project was deleted, so it was not saved again.")
+        }
         var p = project
         p.modifiedAt = Date()
         let folder = folderURL(for: p.id)
@@ -178,6 +228,9 @@ final class ProjectStore {
             try? fm.copyItem(at: main, to: backup)
         }
         try data.write(to: main, options: .atomic)
+        if let meta = try? ProjectStore.makeEncoder().encode(ProjectStore.meta(for: p)) {
+            try? meta.write(to: metaURL(p.id), options: .atomic)
+        }
     }
 
     /// Reads a project. Falls back to the backup copy when the main file is damaged.
@@ -252,7 +305,12 @@ final class ProjectStore {
     func attachAudio(from url: URL, to id: UUID) throws -> AudioTrackSpec {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        try fm.createDirectory(at: folderURL(for: id), withIntermediateDirectories: true)
+        lock.lock()
+        let gone = deleted.contains(id)
+        lock.unlock()
+        guard !gone, fm.fileExists(atPath: folderURL(for: id).path) else {
+            throw EngineError.failed("This project no longer exists.")
+        }
         let ext = url.pathExtension.isEmpty ? "m4a" : url.pathExtension.lowercased()
         let name = "audio.\(ext)"
         let destination = fileURL(name, in: id)
@@ -301,6 +359,7 @@ final class ProjectStore {
     /// Deletes the project folder.
     func delete(id: UUID) throws {
         lock.lock(); defer { lock.unlock() }
+        deleted.insert(id)
         let folder = folderURL(for: id)
         if fm.fileExists(atPath: folder.path) { try fm.removeItem(at: folder) }
     }

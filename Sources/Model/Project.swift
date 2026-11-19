@@ -240,33 +240,33 @@ struct Project: Codable, Hashable, Identifiable {
         return project
     }
 
-    // Lenient decoding: a file written by an older build that lacks a newer top-level field still opens.
+    // Lenient decoding (see ProjectDecoding.swift): a file with missing or unknown fields still opens.
     enum CodingKeys: String, CodingKey {
         case schemaVersion, id, title, createdAt, modifiedAt, source, canvas, loop, flowRegions, anchors, camera, parallax
         case livingEffects, overlays, look, texts, stickers, audio, cinemagraph, presetID
     }
 
     init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        schemaVersion = try c.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
-        id = try c.decode(UUID.self, forKey: .id)
-        title = try c.decodeIfPresent(String.self, forKey: .title) ?? "Untitled"
-        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
-        modifiedAt = try c.decodeIfPresent(Date.self, forKey: .modifiedAt) ?? createdAt
-        source = try c.decode(SourceSpec.self, forKey: .source)
-        canvas = try c.decodeIfPresent(CanvasSpec.self, forKey: .canvas) ?? CanvasSpec()
-        loop = try c.decodeIfPresent(LoopSpec.self, forKey: .loop) ?? LoopSpec()
-        flowRegions = try c.decodeIfPresent([FlowRegion].self, forKey: .flowRegions) ?? []
-        anchors = try c.decodeIfPresent([BrushStroke].self, forKey: .anchors) ?? []
-        camera = try c.decodeIfPresent(CameraMotion.self, forKey: .camera) ?? CameraMotion()
-        parallax = try c.decodeIfPresent(ParallaxSettings.self, forKey: .parallax) ?? ParallaxSettings()
-        livingEffects = try c.decodeIfPresent([LivingEffect].self, forKey: .livingEffects) ?? []
-        overlays = try c.decodeIfPresent([OverlayLayer].self, forKey: .overlays) ?? []
-        look = try c.decodeIfPresent(Look.self, forKey: .look) ?? Look()
-        texts = try c.decodeIfPresent([TextLayer].self, forKey: .texts) ?? []
-        stickers = try c.decodeIfPresent([StickerLayer].self, forKey: .stickers) ?? []
-        audio = try c.decodeIfPresent(AudioTrackSpec.self, forKey: .audio)
-        cinemagraph = try c.decodeIfPresent(CinemagraphSettings.self, forKey: .cinemagraph) ?? CinemagraphSettings()
-        presetID = try c.decodeIfPresent(String.self, forKey: .presetID)
+        let c = try decoder.container(keyedBy: DynamicKey.self)
+        schemaVersion = c.get("schemaVersion", 1)
+        id = try c.need("id")
+        title = c.get("title", "Untitled")
+        createdAt = c.get("createdAt", Date())
+        modifiedAt = c.get("modifiedAt", createdAt)
+        source = try c.need("source")
+        canvas = c.get("canvas", CanvasSpec())
+        loop = c.get("loop", LoopSpec())
+        flowRegions = c.list("flowRegions")
+        anchors = c.list("anchors")
+        camera = c.get("camera", CameraMotion())
+        parallax = c.get("parallax", ParallaxSettings())
+        livingEffects = c.list("livingEffects")
+        overlays = c.list("overlays")
+        look = c.get("look", Look())
+        texts = c.list("texts")
+        stickers = c.list("stickers")
+        audio = c.opt("audio")
+        cinemagraph = c.get("cinemagraph", CinemagraphSettings())
+        presetID = c.opt("presetID")
     }
 }
