@@ -286,7 +286,7 @@ def build_index():
     faq_html = "\n".join(
         f'        <details><summary>{html.escape(q)}</summary><div class="answer">{a}</div></details>' for q, a in FAQ)
     overlays = ("Rain, heavy rain, snow, blizzard, falling leaves, petals, fireflies, sparkles, bokeh, dust, embers, "
-                "smoke and fog, lens flare, light leaks, twinkling stars, confetti, hearts, bubbles, shooting stars and fireworks.")
+                "fog, lens flare, light leaks, twinkling stars, confetti, hearts, bubbles, shooting stars and fireworks.")
 
     body = head(title, desc, "", jsonld_app() + jsonld_faq(), root="") + header("", "") + f"""
 <main id="main">
@@ -312,9 +312,9 @@ def build_index():
       <div class="section-body">
         <dl class="defs">
           <div><dt>Flow brush</dt><dd>Paint the water, the smoke or the hair, then draw arrows to say which way it moves. Set the speed and the strength. Add as many regions as you like, each with its own settings. The loop is seamless.</dd></div>
-          <div><dt>Anchor brush</dt><dd>Pin the parts that must stay still, so a river can run past a bridge that does not budge.</dd></div>
+          <div><dt>Anchor brush</dt><dd>Pin the parts that must stay still while the rest moves, so a river can run past a bridge.</dd></div>
           <div><dt>Cinemagraph from video</dt><dd>Choose a clip, choose a loop of up to six seconds, choose the still frame, and paint the part that keeps moving. The loop is smoothed at the ends, or plays back and forth.</dd></div>
-          <div><dt>3D parallax and depth zoom</dt><dd>Separate a subject from its background and move the camera between them. Depth can come from the subject Lumotion finds on your device, from depth saved in a portrait photo, or from a brush you paint yourself. Revealed edges are filled so there are no holes.</dd></div>
+          <div><dt>3D parallax and depth zoom</dt><dd>Separate a subject from its background and move the camera between them. Depth can come from the subject Lumotion finds on your device, from depth saved in a portrait photo, or from a brush you paint yourself. Revealed edges are filled.</dd></div>
           <div><dt>Camera motion</dt><dd>Zoom in or out, pan, drift, rotate, add a handheld shake, or let the frame breathe, with easing you can choose.</dd></div>
           <div><dt>Living effects for the whole photo</dt><dd>Eleven effects: water ripple, waves, wind sway, heat haze, shimmer, pulse, light sweep, glitch, wobble, wiggle and ink swirl, over the whole picture or just the part you choose.</dd></div>
           <div><dt>Overlays</dt><dd>{overlays} Stack several, and set the intensity, speed, size and tint of each.</dd></div>

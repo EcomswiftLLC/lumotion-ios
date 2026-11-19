@@ -10,7 +10,7 @@ Naming rule (owner, always): search keywords first, brand last, one colon. The c
 | Home screen name | Lumotion | short on purpose, long names truncate |
 | Promotional text | see below | 107 of 170 |
 | Keywords | cinemograph,loop,live,gif,parallax,motion,living,video,animate,flow,rain,snow,overlay,3d,depth,wind | 99 of 100 |
-| Description | see below | 3293 of 4000 |
+| Description | see below | 3271 of 4000 |
 | What's New (1.0) | see below | 196 of 4000 |
 | Primary category | Photo & Video | |
 | Secondary category | Graphics & Design | |
@@ -36,7 +36,7 @@ Combinations such as "photo to video" or "living photo" are formed by Apple from
 Paint the flow, add depth and rain, export a seamless loop. Free, private and made on your iPhone and iPad.
 ```
 
-## Description (3293 of 4000)
+## Description (3271 of 4000)
 
 Honest wording: no star or review claims, no competitor names, no "AI", no claim a test cannot prove, and the ad model stated plainly.
 
@@ -46,7 +46,7 @@ Make a still photo move. Lumotion turns one photo into a seamless looping animat
 PAINT THE MOTION
 - Flow brush: paint an area, draw arrows to set the direction, then set the speed and strength. Water, smoke, clouds and hair can drift in a loop that closes without a seam
 - Several flow areas in one photo, each with its own arrows, speed, strength and softness
-- Anchor brush: pin parts of the picture so they stay perfectly still
+- Anchor brush: pin parts of the picture so they stay still while the rest moves
 - Eraser, undo and redo, brush size and feather
 
 CINEMAGRAPHS FROM VIDEO
@@ -54,12 +54,12 @@ CINEMAGRAPHS FROM VIDEO
 - Loop smoothing blends the ends so the clip repeats without a jump, or play it back and forth
 
 DEPTH AND CAMERA
-- 3D parallax: move the camera between a subject and its background. Depth can come from the subject found on your device, from depth saved in portrait photos, from a depth brush you paint, or from a simple gradient. Revealed edges are filled, so there are no holes
+- 3D parallax: move the camera between a subject and its background. Depth can come from the subject found on your device, from depth saved in portrait photos, from a depth brush you paint, or from a simple gradient. Revealed edges are filled
 - Camera moves: zoom in or out, pan, drift, rotate, handheld shake and breathe, with the easing you choose
 
 LIVING EFFECTS AND OVERLAYS
 - 11 whole-photo effects: water ripple, waves, wind sway, heat haze, shimmer, pulse, light sweep, glitch, wobble, wiggle and ink swirl, over the whole picture or only where you paint
-- 20 overlays: rain, heavy rain, snow, blizzard, falling leaves, petals, fireflies, sparkles, bokeh, dust, embers, smoke and fog, lens flare, light leaks, twinkling stars, confetti, hearts, bubbles, shooting stars and fireworks. Stack as many as you like and set the intensity, speed, size and tint of each
+- 20 overlays: rain, heavy rain, snow, blizzard, falling leaves, petals, fireflies, sparkles, bokeh, dust, embers, fog, lens flare, light leaks, twinkling stars, confetti, hearts, bubbles, shooting stars and fireworks. Stack as many as you like and set the intensity, speed, size and tint of each
 
 MAGIC PRESETS
 - 18 one-tap starting points, such as Waterfall, Clouds drift, Rainy window, Neon rain or Parallax portrait. They are starting points, so you can change everything afterwards

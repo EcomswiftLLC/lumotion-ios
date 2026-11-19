@@ -54,7 +54,7 @@ Some US state privacy laws treat advertising of this kind as "sharing" or "targe
 
 ## 5. Your choices about ads and tracking
 
-- **Consent form (EEA, UK and other regions where required).** When you first open the app, a consent form from Google's User Messaging Platform may appear. You can accept, decline or manage your choices. You can reopen it later in Settings, in the Ad privacy choices row, where one is required.
+- **Consent form (EEA, UK and other regions where required).** Right after the welcome screens, a consent form from Google's User Messaging Platform may appear. You can accept, decline or manage your choices. You can reopen it later in Settings, in the Ad privacy choices row, where one is required.
 - **Tracking prompt.** After the consent step, iOS may ask whether Lumotion may track you across apps and websites owned by other companies (App Tracking Transparency). If you tap "Ask App Not to Track", the advertising identifier is not shared, and ads you see will be less personalised. The app works the same either way. Lumotion itself does not combine your data across other companies' apps and websites. The only tracking that can happen is through Google's advertising SDK, which may use the advertising identifier to show and measure ads, and only if you allow it in the prompt.
 - **iOS settings.** You can change the tracking choice at any time in Settings > Privacy & Security > Tracking, and reset your advertising identifier in the same area.
 - **Ads cannot be switched off inside the app**, because ads are how Lumotion is paid for. If you decline a consent form that applies in your region, ads may not load for you. In that case no banner appears, and when you export the export goes ahead without an ad.
