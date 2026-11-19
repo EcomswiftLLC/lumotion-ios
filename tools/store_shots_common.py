@@ -40,6 +40,10 @@ SLIDES = [
 ]
 
 
+# Captures whose bottom edge carries pinned controls are shown whole instead of bleeding off the slide.
+FIT_SLIDES = {"export"}
+
+
 def font(names, size):
     for n in names:
         for base in ("C:/Windows/Fonts/", "/usr/share/fonts/truetype/dejavu/", "/System/Library/Fonts/Supplemental/"):
@@ -109,7 +113,7 @@ def wrap_text(draw, text, fnt, max_w):
     return lines
 
 
-def make_slide(W, H, shot_path, lines, caption, opts, brand=False):
+def make_slide(W, H, shot_path, lines, caption, opts, brand=False, fit=False):
     canvas = background(W, H)
     d = ImageDraw.Draw(canvas)
     head_f, sub_f = serif(opts["head"]), sans(opts["sub"])
@@ -127,29 +131,39 @@ def make_slide(W, H, shot_path, lines, caption, opts, brand=False):
     for sl in wrap_text(d, caption, sub_f, W * 0.86):
         d.text((W / 2, y), sl, font=sub_f, fill=MIST, anchor="ma")
         y += int(opts["sub"] * 1.38)
-    # the capture: rounded top, bleeding off the bottom edge like a phone rising into frame
+    # the capture: by default a rounded top bleeding off the bottom edge (a phone rising into frame). With fit=True the
+    # whole capture is shown, scaled to the free height, for screens whose bottom edge carries controls (Export).
     shot = Image.open(shot_path).convert("RGB")
-    sw = opts["shot_w"]
-    shot = shot.resize((sw, round(shot.height * sw / shot.width)), Image.LANCZOS)
     top = max(y + opts["shot_gap"], opts["min_shot_top"])
-    avail = H - top
-    shot = shot.crop((0, 0, sw, min(shot.height, avail)))
-    framed = rounded_top(shot, opts["radius"])
+    if fit:
+        margin = opts["fit_margin"]
+        sw = int((H - top - margin) * shot.width / shot.height)
+        sh = H - top - margin
+        shot = shot.resize((sw, sh), Image.LANCZOS)
+        mask = Image.new("L", shot.size, 0)
+        ImageDraw.Draw(mask).rounded_rectangle([0, 0, sw - 1, sh - 1], opts["radius"], fill=255)
+        framed = shot.convert("RGBA")
+        framed.putalpha(mask)
+        bottom = top + sh
+    else:
+        sw = opts["shot_w"]
+        shot = shot.resize((sw, round(shot.height * sw / shot.width)), Image.LANCZOS)
+        shot = shot.crop((0, 0, sw, min(shot.height, H - top)))
+        framed = rounded_top(shot, opts["radius"])
+        bottom = H + 40
     x = (W - sw) // 2
-    # glow behind the device and a deep shadow
     halo = Image.new("L", (W, H), 0)
-    ImageDraw.Draw(halo).rounded_rectangle([x - 6, top - 6, x + sw + 6, H + 40], opts["radius"] + 6, fill=255)
+    ImageDraw.Draw(halo).rounded_rectangle([x - 6, top - 6, x + sw + 6, bottom + 6], opts["radius"] + 6, fill=255)
     halo_g = halo.filter(ImageFilter.GaussianBlur(opts["radius"] * 0.9)).point(lambda v: int(v * 0.30))
     canvas.paste(Image.new("RGB", (W, H), GLOW), (0, 0), halo_g)
     shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    ImageDraw.Draw(shadow).rounded_rectangle([x, top + 30, x + sw, H + 80], opts["radius"], fill=(0, 0, 0, 190))
+    ImageDraw.Draw(shadow).rounded_rectangle([x, top + 30, x + sw, bottom + 40], opts["radius"], fill=(0, 0, 0, 190))
     shadow = shadow.filter(ImageFilter.GaussianBlur(opts["radius"] * 0.5))
     canvas.paste(shadow, (0, 0), shadow)
-    # champagne hairline edge
-    edge = Image.new("RGBA", (sw + 8, framed.height + 8), (0, 0, 0, 0))
-    ImageDraw.Draw(edge).rounded_rectangle([0, 0, edge.width - 1, edge.height + opts["radius"]], opts["radius"] + 4,
-                                           outline=GLOW + (150,), width=4)
-    canvas.paste(edge, (x - 4, top - 4), edge)
+    edge = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(edge).rounded_rectangle([x - 4, top - 4, x + sw + 3, bottom + (opts["radius"] if not fit else 3)],
+                                           opts["radius"] + 4, outline=GLOW + (150,), width=4)
+    canvas.paste(edge, (0, 0), edge)
     canvas.paste(framed, (x, top), framed)
     return canvas.convert("RGB")
 
@@ -168,7 +182,7 @@ def run(argv, W, H, opts, ratio_name):
             missing.append(name)
             continue
         n += 1
-        slide = make_slide(W, H, shot_path, lines, caption, opts, brand=(name == "home-filled"))
+        slide = make_slide(W, H, shot_path, lines, caption, opts, brand=(name == "home-filled"), fit=(name in FIT_SLIDES))
         out = dst / f"{n:02d}-{name}.png"
         slide.save(out, optimize=True)
         wrote.append(out.name)

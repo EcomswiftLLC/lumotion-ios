@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import store_shots_common as common  # noqa: E402
 
 W, H = 2064, 2752
-OPTS = dict(head=160, sub=72, top=170, icon=190, gap=64, shot_w=1640, shot_gap=110, min_shot_top=720, radius=72)
+OPTS = dict(head=160, sub=72, top=170, icon=190, gap=64, shot_w=1640, shot_gap=110, min_shot_top=780, radius=72, fit_margin=70)
 
 if __name__ == "__main__":
     common.run(sys.argv, W, H, OPTS, "iPad 13 inch")
