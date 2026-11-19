@@ -65,33 +65,44 @@ final class ProjectStore {
     /// or a key, an array element or a value was dropped or replaced by a default (an effect kind this build does not
     /// know, an unreadable value). Keys that are merely missing do not count, they are filled with defaults and nothing
     /// is lost.
-    static func loadingWouldLoseData(_ data: Data) -> Bool {
-        guard let object = try? JSONSerialization.jsonObject(with: data) else { return false }
-        guard let project = try? makeDecoder().decode(Project.self, from: data) else { return true }
-        if project.schemaVersion > Project.currentSchemaVersion { return true }
-        guard let encoded = try? makeEncoder().encode(project), let again = try? JSONSerialization.jsonObject(with: encoded) else { return false }
-        return !isCovered(object, by: again)
+    static func loadingWouldLoseData(_ data: Data) -> Bool { whatLoadingWouldLose(data) != nil }
+
+    /// Describes the first thing loading `data` would lose (a path such as "livingEffects[1]"), or nil when nothing.
+    static func whatLoadingWouldLose(_ data: Data) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) else { return nil }
+        guard let project = try? makeDecoder().decode(Project.self, from: data) else { return "the file cannot be read as a project" }
+        if project.schemaVersion > Project.currentSchemaVersion { return "schemaVersion \(project.schemaVersion)" }
+        guard let encoded = try? makeEncoder().encode(project), let again = try? JSONSerialization.jsonObject(with: encoded) else { return nil }
+        return firstLoss(object, in: again, path: "")
     }
 
-    /// Every key, element and value of `old` is present, unchanged, in `new`.
-    private static func isCovered(_ old: Any, by new: Any) -> Bool {
-        if old is NSNull { return true }
+    /// The path of the first key, element or value of `old` that is not present, unchanged, in `new`; nil when all are.
+    /// Numbers match within a tiny tolerance, because other writers print them with fewer digits.
+    private static func firstLoss(_ old: Any, in new: Any, path: String) -> String? {
+        if old is NSNull { return nil }
         if let o = old as? [String: Any] {
-            guard let n = new as? [String: Any] else { return false }
-            for (key, value) in o {
-                if value is NSNull { continue }
-                guard let other = n[key], isCovered(value, by: other) else { return false }
+            guard let n = new as? [String: Any] else { return path.isEmpty ? "root" : path }
+            for key in o.keys.sorted() {
+                guard let value = o[key], !(value is NSNull) else { continue }
+                let child = path.isEmpty ? key : path + "." + key
+                guard let other = n[key] else { return child }
+                if let lost = firstLoss(value, in: other, path: child) { return lost }
             }
-            return true
+            return nil
         }
         if let o = old as? [Any] {
-            guard let n = new as? [Any], n.count == o.count else { return false }
-            for i in o.indices where !isCovered(o[i], by: n[i]) { return false }
-            return true
+            guard let n = new as? [Any], n.count == o.count else { return path }
+            for i in o.indices {
+                if let lost = firstLoss(o[i], in: n[i], path: path + "[\(i)]") { return lost }
+            }
+            return nil
         }
-        if let o = old as? NSNumber, let n = new as? NSNumber { return o.doubleValue == n.doubleValue }
-        if let o = old as? String, let n = new as? String { return o == n }
-        return false
+        if let o = old as? NSNumber, let n = new as? NSNumber {
+            let a = o.doubleValue, b = n.doubleValue
+            return abs(a - b) <= 1e-9 * max(1, abs(a)) ? nil : path
+        }
+        if let o = old as? String, let n = new as? String { return o == n ? nil : path }
+        return path
     }
 
     // MARK: Locations

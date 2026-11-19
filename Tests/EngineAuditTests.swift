@@ -702,6 +702,7 @@ extension EngineAuditTests {
         XCTAssertFalse(origExists(store, project.id))
         // A file that only lacks keys (an older build) loses nothing either.
         try rewriteProjectFile(store, project.id) { $0.removeValue(forKey: "look"); $0.removeValue(forKey: "cinemagraph") }
+        XCTAssertNil(ProjectStore.whatLoadingWouldLose(try Data(contentsOf: store.fileURL("project.json", in: project.id))))
         let older = ProjectStore(rootURL: store.rootURL)
         try older.save(try older.load(id: project.id))
         XCTAssertFalse(origExists(store, project.id))
@@ -757,7 +758,7 @@ extension EngineAuditTests {
         XCTAssertFalse(ProjectStore.loadingWouldLoseData(clean))
         var object = try XCTUnwrap(JSONSerialization.jsonObject(with: clean) as? [String: Any])
         object.removeValue(forKey: "texts")
-        XCTAssertFalse(ProjectStore.loadingWouldLoseData(try JSONSerialization.data(withJSONObject: object)), "missing keys take defaults, nothing is lost")
+        XCTAssertNil(ProjectStore.whatLoadingWouldLose(try JSONSerialization.data(withJSONObject: object)), "missing keys take defaults, nothing is lost")
         object["unknownKeyFromTheFuture"] = 1
         XCTAssertTrue(ProjectStore.loadingWouldLoseData(try JSONSerialization.data(withJSONObject: object)))
         XCTAssertFalse(ProjectStore.loadingWouldLoseData(Data("not json".utf8)), "an unreadable file is not a newer file")
